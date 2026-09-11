@@ -1,0 +1,79 @@
+﻿# ==============================================================================
+# OS Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ==============================================================================
+# Environment & Secrets
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.jks
+*.keystore
+
+# ==============================================================================
+# IDEs and Editors
+# ==============================================================================
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.sublime-project
+*.sublime-workspace
+.fleet/
+
+# ==============================================================================
+# Node.js & NestJS (backend)
+# ==============================================================================
+backend/node_modules/
+backend/dist/
+backend/coverage/
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+.npm/
+
+# ==============================================================================
+# Android & Gradle (mobile)
+# ==============================================================================
+.gradle/
+**/build/
+mobile/local.properties
+mobile/.gradle/
+mobile/**/build/
+*.apk
+*.ap_
+*.aab
+*.dex
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ==============================================================================
+# iOS & Xcode (mobile/iosApp)
+# ==============================================================================
+mobile/iosApp/*.xcodeproj/project.xcworkspace/
+mobile/iosApp/*.xcodeproj/xcuserdata/
+mobile/iosApp/*.xcworkspace/xcuserdata/
+mobile/iosApp/DerivedData/
+mobile/iosApp/Pods/
+mobile/iosApp/.build/
+*.xcuserstate
+*.xcbkptlist
