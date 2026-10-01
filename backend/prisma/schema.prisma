@@ -10,11 +10,21 @@ generator client {
 model User {
   id                 String   @id @default(uuid())
   email              String   @unique
+  username           String   @unique
   password           String
   name               String
+  avatarUrl          String?
+  points             Int      @default(0)
+  level              Int      @default(1)
+  role               Role     @default(COMMUTER)
   hashedRefreshToken String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@map("users")
+}
+
+enum Role {
+  COMMUTER
+  ADMIN
 }

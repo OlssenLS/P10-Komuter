@@ -1,7 +1,12 @@
 export interface UserDto {
   id: string;
   email: string;
+  username: string;
   name: string;
+  avatarUrl?: string | null;
+  points: number;
+  level: number;
+  role: string;
   createdAt: string;
 }
 

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   HttpCode,
   HttpStatus,
@@ -45,5 +46,13 @@ export class AuthController {
   async logout(@Req() req: any) {
     const userId = req.user['id'];
     return this.authService.logout(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @HttpCode(HttpStatus.OK)
+  async getProfile(@Req() req: any) {
+    const userId = req.user['id'];
+    return this.authService.getProfile(userId);
   }
 }
