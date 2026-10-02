@@ -5,13 +5,17 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SignupRequest(
     val email: String,
+    val username: String,
     val password: String,
-    val name: String
+    val name: String,
+    val avatarUrl: String? = null
 )
 
 @Serializable
 data class LoginRequest(
-    val email: String,
+    val identifier: String? = null,
+    val email: String? = null,
+    val username: String? = null,
     val password: String
 )
 
@@ -25,15 +29,20 @@ data class AuthTokenResponse(
     val accessToken: String,
     val refreshToken: String,
     val tokenType: String = "Bearer",
-    val expiresIn: Long
+    val expiresIn: Long = 900
 )
 
 @Serializable
 data class UserDto(
     val id: String,
     val email: String,
-    val name: String,
-    val createdAt: String
+    val username: String = "",
+    val name: String = "",
+    val avatarUrl: String? = null,
+    val points: Int = 0,
+    val level: Int = 1,
+    val role: String = "COMMUTER",
+    val createdAt: String = ""
 )
 
 @Serializable
