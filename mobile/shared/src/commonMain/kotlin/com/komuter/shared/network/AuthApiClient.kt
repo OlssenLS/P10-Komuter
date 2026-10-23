@@ -23,7 +23,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
 class AuthApiClient(
-    var baseUrl: String = "http://192.168.0.2:3000"
+    var baseUrl: String = "http://192.168.0.5:3000"
 ) {
     private val client: HttpClient = HttpClient {
         install(ContentNegotiation) {
