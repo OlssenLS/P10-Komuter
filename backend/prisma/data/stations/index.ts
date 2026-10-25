@@ -1,9 +1,17 @@
 import { StationSeedData } from './types.js';
 import { cikarangLineStations } from './cikarang-line.js';
+import { bogorLineStations } from './bogor-line.js';
+import { rangkasbitungLineStations } from './rangkasbitung-line.js';
+import { tangerangLineStations } from './tangerang-line.js';
+import { tanjungPriokLineStations } from './tanjung-priok-line.js';
 import { defaultStations } from './default-stations.js';
 
 export * from './types.js';
 export * from './cikarang-line.js';
+export * from './bogor-line.js';
+export * from './rangkasbitung-line.js';
+export * from './tangerang-line.js';
+export * from './tanjung-priok-line.js';
 export * from './default-stations.js';
 
 /**
@@ -17,7 +25,10 @@ export function getAllStations(): StationSeedData[] {
   const allStationLists: StationSeedData[] = [
     ...defaultStations,
     ...cikarangLineStations,
-    // Add future line lists here (e.g. ...bogorLineStations)
+    ...bogorLineStations,
+    ...rangkasbitungLineStations,
+    ...tangerangLineStations,
+    ...tanjungPriokLineStations,
   ];
 
   for (const station of allStationLists) {
