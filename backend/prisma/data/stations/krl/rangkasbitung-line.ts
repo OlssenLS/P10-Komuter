@@ -1,5 +1,5 @@
 import { TransportType } from '@prisma/client';
-import { StationSeedData } from './types.js';
+import { StationSeedData } from '../types.js';
 
 export const rangkasbitungLineStations: StationSeedData[] = [
   {
