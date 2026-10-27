@@ -28,3 +28,74 @@ enum Role {
   COMMUTER
   ADMIN
 }
+
+enum TransportType {
+  KRL
+  MRT
+  LRTJKT
+  LRTJBK
+  TJ
+  TRANSIT
+}
+
+enum ReportCategory {
+  CROWD
+  DELAY
+  FACILITY
+  EVENT
+}
+
+enum DelayImpact {
+  SINGLE_VEHICLE
+  STATION_ONLY
+  ENTIRE_LINE
+}
+
+enum ReportStatus {
+  NEW
+  VERIFIED
+  RESOLVED
+  EXPIRED
+}
+
+model Station {
+  id              String             @id @default(cuid())
+  name            String 
+  isTransitHub    Boolean            @default(false)
+  supportedTypes  TransportType[]
+  lineNames       String[]
+  latitude        Float
+  longitude       Float
+  reports         DisruptionReport[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model DisruptionReport {
+  id           String         @id @default(cuid())
+  stationId    String
+  station      Station        @relation(fields: [stationId], references: [id])
+  userId       String
+  
+  title        String
+  category     ReportCategory
+  status       ReportStatus   @default(NEW)
+  impactLevel  DelayImpact?
+  description  String?
+  
+  upvotes      Upvote[]
+  upvoteCount  Int            @default(0)
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Upvote {
+  id        String           @id @default(cuid())
+  reportId  String
+  report    DisruptionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime         @default(now())
+
+  @@unique([reportId, userId])
+}
