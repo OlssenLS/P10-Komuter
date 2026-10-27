@@ -6,9 +6,11 @@ import com.komuter.shared.model.AuthTokenResponse
 import com.komuter.shared.model.LoginRequest
 import com.komuter.shared.model.RefreshTokenRequest
 import com.komuter.shared.model.SignupRequest
+import com.komuter.shared.model.UserDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -21,7 +23,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
 class AuthApiClient(
-    private val baseUrl: String = "http://10.0.2.2:3000"
+    var baseUrl: String = "http://192.168.0.2:3000"
 ) {
     private val client: HttpClient = HttpClient {
         install(ContentNegotiation) {
@@ -84,6 +86,19 @@ class AuthApiClient(
                 response.body<ActionStatusResponse>()
             } else {
                 throw Exception("Logout failed with HTTP ${response.status.value}: ${response.bodyAsText()}")
+            }
+        }
+    }
+
+    suspend fun getProfile(accessToken: String): Result<UserDto> {
+        return runCatching {
+            val response: HttpResponse = client.get("$baseUrl/auth/me") {
+                header("Authorization", "Bearer $accessToken")
+            }
+            if (response.status.isSuccess()) {
+                response.body<UserDto>()
+            } else {
+                throw Exception("Get profile failed with HTTP ${response.status.value}: ${response.bodyAsText()}")
             }
         }
     }

@@ -6,6 +6,8 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors();
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -15,8 +17,8 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  logger.log(`Komuter Backend is running on http://localhost:${port}`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Komuter Backend is running on LAN: http://192.168.0.2:${port}`);
 }
 
 await bootstrap();

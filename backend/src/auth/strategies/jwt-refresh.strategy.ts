@@ -20,7 +20,10 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
     });
   }
 
-  validate(req: Request, payload: { sub: string; email: string }) {
+  validate(
+    req: Request,
+    payload: { sub: string; email: string; username?: string; role?: string },
+  ) {
     const refreshToken =
       req?.body?.refreshToken || req.get('Authorization')?.replace('Bearer', '').trim();
 
@@ -31,6 +34,8 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
     return {
       id: payload.sub,
       email: payload.email,
+      username: payload.username,
+      role: payload.role,
       refreshToken,
     };
   }
