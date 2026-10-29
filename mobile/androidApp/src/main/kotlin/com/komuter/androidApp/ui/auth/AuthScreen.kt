@@ -1,5 +1,7 @@
 package com.komuter.androidApp.ui.auth
 
+import com.komuter.shared.config.AppConfig
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,7 +82,7 @@ fun AuthScreen(
             value = uiState.serverUrl,
             onValueChange = { viewModel.onServerUrlChange(it) },
             label = { Text("Backend Server URL") },
-            placeholder = { Text("http://192.168.0.5:3000") },
+            placeholder = { Text(AppConfig.BASE_URL) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )

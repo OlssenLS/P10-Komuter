@@ -1,5 +1,6 @@
 package com.komuter.shared.network
 
+import com.komuter.shared.config.AppConfig
 import com.komuter.shared.model.CreateReportRequest
 import com.komuter.shared.model.DisruptionReportDto
 import io.ktor.client.HttpClient
@@ -18,7 +19,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
 class ReportApiClient(
-    var baseUrl: String = "http://192.168.0.5:3000"
+    var baseUrl: String = AppConfig.BASE_URL
 ) {
     private val client: HttpClient = HttpClient {
         install(ContentNegotiation) {

@@ -1,5 +1,7 @@
 package com.komuter.androidApp.ui.stations
 
+import com.komuter.shared.config.AppConfig
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.komuter.shared.model.NearbyStationsRequest
@@ -13,7 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class NearbyStationUiState(
-    val serverUrl: String = "http://192.168.0.5:3000",
+    val serverUrl: String = AppConfig.BASE_URL,
     val hasFinePermission: Boolean = false,
     val isGpsProviderActive: Boolean = true,
     val isLocating: Boolean = false,

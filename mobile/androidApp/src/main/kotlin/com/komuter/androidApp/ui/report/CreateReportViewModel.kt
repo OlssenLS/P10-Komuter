@@ -1,5 +1,7 @@
 package com.komuter.androidApp.ui.report
 
+import com.komuter.shared.config.AppConfig
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.komuter.shared.model.CreateReportRequest
@@ -13,7 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CreateReportUiState(
-    val serverUrl: String = "http://192.168.0.5:3000",
+    val serverUrl: String = AppConfig.BASE_URL,
     val stationId: String = "",
     val stationName: String = "",
     val title: String = "",

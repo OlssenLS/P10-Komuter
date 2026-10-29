@@ -2,6 +2,7 @@ package com.komuter.androidApp.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.komuter.shared.config.AppConfig
 import com.komuter.shared.model.LoginRequest
 import com.komuter.shared.model.SignupRequest
 import com.komuter.shared.model.UserDto
@@ -14,7 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class AuthUiState(
-    val serverUrl: String = "http://192.168.0.5:3000",
+    val serverUrl: String = AppConfig.BASE_URL,
     val email: String = "",
     val username: String = "",
     val name: String = "",

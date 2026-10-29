@@ -23,6 +23,7 @@ Komuter/
 │   ├── package.json         # Backend dependencies and scripts
 │   └── tsconfig.json        # TypeScript configuration
 ├── CONTRIBUTING.md          # Commit message conventions & workflow
+├── .env.example             # Monorepo root environment template
 ├── .gitignore               # Multi-ecosystem ignore definitions
 └── README.md                # Project documentation
 ```
@@ -54,15 +55,18 @@ Komuter/
    ```bash
    cp .env.example .env
    ```
-4. Configure your database URL and JWT secrets in `.env`:
+4. Configure your database URL, JWT secrets, and LAN IP in `.env`:
    ```env
+   # Update SERVER_IP with your machine's IPv4 from `ipconfig` for physical phone connectivity
+   SERVER_IP=10.253.9.190
+   PORT=3000
    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/komuter_db?schema=public"
    JWT_ACCESS_SECRET="your-secure-access-secret"
    JWT_ACCESS_EXPIRES_IN="15m"
    JWT_REFRESH_SECRET="your-secure-refresh-secret"
    JWT_REFRESH_EXPIRES_IN="7d"
-   PORT=3000
    ```
+   > **Note**: Whenever your machine switches Wi-Fi/network, update `SERVER_IP` in `.env` once. The mobile app automatically syncs `AppConfig.BASE_URL` with this IP on build/sync.
 5. Run database migrations or push schema:
    ```bash
    npx prisma db push
@@ -71,7 +75,7 @@ Komuter/
    ```bash
    npm run start:dev
    ```
-   API endpoints will be available at `http://localhost:3000/auth`.
+   API endpoints will be available at `http://<SERVER_IP>:3000` (or `http://localhost:3000`).
 
 ---
 

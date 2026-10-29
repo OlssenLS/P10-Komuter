@@ -17,8 +17,9 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ?? 3000;
+  const serverIp = process.env.SERVER_IP ?? 'localhost';
   await app.listen(port, '0.0.0.0');
-  logger.log(`Komuter Backend is running on LAN: http://192.168.0.2:${port}`);
+  logger.log(`Komuter Backend is running on LAN: http://${serverIp}:${port}`);
 }
 
 await bootstrap();

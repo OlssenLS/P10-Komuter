@@ -10,7 +10,7 @@ import { StationsModule } from './stations/stations.module.js';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env', '../.env'],
     }),
     PrismaModule,
     AuthModule,

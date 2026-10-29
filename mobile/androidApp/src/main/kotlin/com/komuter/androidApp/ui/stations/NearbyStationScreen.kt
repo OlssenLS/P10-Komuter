@@ -1,5 +1,7 @@
 package com.komuter.androidApp.ui.stations
 
+import com.komuter.shared.config.AppConfig
+
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
@@ -136,7 +138,7 @@ fun NearbyStationScreen(
             value = uiState.serverUrl,
             onValueChange = { viewModel.onServerUrlChange(it) },
             label = { Text("Backend Server URL") },
-            placeholder = { Text("http://192.168.0.5:3000") },
+            placeholder = { Text(AppConfig.BASE_URL) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
