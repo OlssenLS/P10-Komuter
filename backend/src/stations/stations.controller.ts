@@ -33,6 +33,12 @@ export class StationsController {
     return this.stationsService.findOne(id);
   }
 
+  @Get(':id/reports')
+  @HttpCode(HttpStatus.OK)
+  async findReports(@Param('id') id: string) {
+    return this.stationsService.findReports(id);
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateStationDto) {

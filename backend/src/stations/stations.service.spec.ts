@@ -49,6 +49,9 @@ describe('StationsService', () => {
       findUnique: vi.fn(),
       create: vi.fn(),
     },
+    disruptionReport: {
+      findMany: vi.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -198,6 +201,29 @@ describe('StationsService', () => {
           latitude: newStation.latitude,
           longitude: newStation.longitude,
         },
+      });
+    });
+  });
+
+  describe('findReports', () => {
+    it('should return reports for a station', async () => {
+      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
+      const mockReports = [
+        {
+          id: 'rep-1',
+          stationId: 'manggarai-1',
+          title: 'Delay',
+          station: { id: 'manggarai-1', name: 'Stasiun Manggarai' },
+        },
+      ];
+      mockPrismaService.disruptionReport.findMany.mockResolvedValue(mockReports);
+
+      const result = await service.findReports('manggarai-1');
+      expect(result).toEqual(mockReports);
+      expect(mockPrismaService.disruptionReport.findMany).toHaveBeenCalledWith({
+        where: { stationId: 'manggarai-1' },
+        include: { station: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
       });
     });
   });

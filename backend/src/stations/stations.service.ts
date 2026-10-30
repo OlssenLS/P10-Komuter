@@ -112,6 +112,22 @@ export class StationsService {
     return station;
   }
 
+  async findReports(stationId: string) {
+    await this.findOne(stationId);
+    return this.prisma.disruptionReport.findMany({
+      where: { stationId },
+      include: {
+        station: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async create(dto: CreateStationDto): Promise<Station> {
     return this.prisma.station.create({
       data: {
