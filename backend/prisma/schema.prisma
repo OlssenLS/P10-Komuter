@@ -21,12 +21,19 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  reports               DisruptionReport[]     @relation("ReportAuthor")
+  upvotes               Upvote[]
+  facilityConfirmations FacilityConfirmation[]
+  resolvedReports       DisruptionReport[]     @relation("ReportResolver")
+  verifiedReports       DisruptionReport[]     @relation("ReportVerifier")
+
   @@map("users")
 }
 
 enum Role {
   COMMUTER
   ADMIN
+  MODERATOR
 }
 
 enum TransportType {
@@ -39,16 +46,67 @@ enum TransportType {
 }
 
 enum ReportCategory {
-  CROWD
-  DELAY
-  FACILITY
-  EVENT
+  CROWD       // Low, Normal, High crowd density & safety alerts
+  DELAY       // Train/bus schedule delays
+  FACILITY    // Broken station facilities & amenities
+  DISRUPTION  // Operational emergencies: closures, flooding, signal failure
+  EVENT       // Mass gatherings, CFD, marathons, protests
+}
+
+enum ReportSubCategory {
+  // Crowd Subcategories & Safety
+  LOW
+  NORMAL
+  HIGH
+  CROWD_OVERFLOW
+  THEFT
+  HARASSMENT
+
+  // Delay Subcategories
+  MINOR               // < 5 minutes
+  MEDIUM              // 5 - 15 minutes
+  MAJOR               // > 15 minutes
+
+  // Facility Subcategories
+  ESCALATOR
+  LIFT
+  TAP_IN_OUT_GATE
+  AIR_CONDITIONER
+  TOILET
+  SAFETY_SECURITY
+
+  // Disruption Subcategories (Operational Emergencies)
+  STATION_CLOSURE
+  TRACK_FLOODING
+  STATION_FLOODING
+  SIGNAL_FAILURE
+  POWER_OUTAGE
+  FIRE_ACCIDENT
+
+  // Event Subcategories
+  DEMONSTRATION
+  CAR_FREE_DAY
+  CONCERT
+  OTHER
 }
 
 enum DelayImpact {
   SINGLE_VEHICLE
   STATION_ONLY
+  LINE_SECTION
   ENTIRE_LINE
+}
+
+enum ReportDirection {
+  INBOUND
+  OUTBOUND
+  BOTH
+}
+
+enum ReportVisibility {
+  LOCAL_CONTEXTUAL // Station page & nearby commuters (Crowd, Facility)
+  LINE_TARGETED    // Overlapping commuter routes (Delay)
+  GLOBAL           // Global live disruption feed & system banners (Disruptions, Events)
 }
 
 enum ReportStatus {
@@ -59,35 +117,108 @@ enum ReportStatus {
 }
 
 model Station {
-  id              String             @id @default(cuid())
-  name            String 
-  isTransitHub    Boolean            @default(false)
-  supportedTypes  TransportType[]
-  lineNames       String[]
-  latitude        Float
-  longitude       Float
-  reports         DisruptionReport[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  name           String 
+  isTransitHub   Boolean            @default(false)
+  supportedTypes TransportType[]
+  lineNames      String[]
+  latitude       Float
+  longitude      Float
+
+  // Relations for disruption reports
+  reports        DisruptionReport[] @relation("StationReports")
+  fromReports    DisruptionReport[] @relation("FromStationReports")
+  toReports      DisruptionReport[] @relation("ToStationReports")
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 }
 
 model DisruptionReport {
-  id           String         @id @default(cuid())
-  stationId    String
-  station      Station        @relation(fields: [stationId], references: [id])
-  userId       String
+  id                  String             @id @default(cuid())
   
-  title        String
-  category     ReportCategory
-  status       ReportStatus   @default(NEW)
-  impactLevel  DelayImpact?
-  description  String?
-  
-  upvotes      Upvote[]
-  upvoteCount  Int            @default(0)
+  // Reporter & Moderation Audit
+  userId              String
+  user                User               @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  verifiedById        String?
+  verifiedBy          User?              @relation("ReportVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedAt          DateTime?
+  resolvedById        String?
+  resolvedBy          User?              @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt          DateTime?
 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  // Category & Subcategory Classification
+  category            ReportCategory
+  subCategory         ReportSubCategory?
+  title               String
+  description         String?
+
+  // Scope & Spatial Context
+  impactLevel         DelayImpact?       // Scope: SINGLE_VEHICLE, STATION_ONLY, LINE_SECTION, ENTIRE_LINE
+  stationId           String?            // Station where disruption occurs or reporting station
+  station             Station?           @relation("StationReports", fields: [stationId], references: [id], onDelete: SetNull)
+  fromStationId       String?            // Start station for LINE_SECTION scope
+  fromStation         Station?           @relation("FromStationReports", fields: [fromStationId], references: [id], onDelete: SetNull)
+  toStationId         String?            // End station for LINE_SECTION scope
+  toStation           Station?           @relation("ToStationReports", fields: [toStationId], references: [id], onDelete: SetNull)
+  
+  // Line & Route Context
+  lineId              String?            // e.g. "bogor-line", "tj-koridor-1"
+  lineName            String?            // e.g. "Bogor Line", "Koridor 1 Blok M - Kota"
+  transportType       TransportType?
+
+  // Directional Context (Arah Destination)
+  direction           ReportDirection?   // INBOUND, OUTBOUND, BOTH
+  directionLabel      String?            // e.g. "Arah Jakarta Kota", "Arah Bogor", "Arah Blok M"
+  destinationStation  String?            // Destination terminus name
+
+  // Vehicle Condition (for single vehicle reporting: Line + Direction + Condition)
+  vehicleCondition    String?
+
+  // Geolocation of reporter (Haversine geofence audit)
+  userLatitude        Float?
+  userLongitude       Float?
+
+  // Event Multimodal & Network Reach
+  affectedStationIds  String[]           @default([])
+  affectedLineIds     String[]           @default([])
+
+  // Lifecycle, TTL & Expiration Decay
+  status              ReportStatus       @default(NEW)
+  visibility          ReportVisibility   @default(LOCAL_CONTEXTUAL)
+  expiresAt           DateTime?          // Dynamic TTL: Crowd 15m, Delay 45m, Facility 7d, Disruption/Event 24h
+  lastConfirmedAt     DateTime?          // Timestamp for Facility confirmation decay ("Masih Rusak?")
+  confirmationCount   Int                @default(0) // Count of "Masih Rusak?" confirmations
+  isBlocked           Boolean            @default(false) // Flags impacted station/track as blocked in routing engine
+  isCrowdOverflow     Boolean            @default(false) // Triggered if 80% High reports in 30min window
+
+  // Community Interactions
+  upvotes             Upvote[]
+  upvoteCount         Int                @default(0)
+  facilityConfirmations FacilityConfirmation[]
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Composite indexes for duplicate detection and high-frequency feed querying
+  @@index([stationId, category, subCategory, status])
+  @@index([lineId, category, subCategory, direction, status])
+  @@index([status, expiresAt])
+  @@index([visibility, status])
+  @@index([userId])
+}
+
+model FacilityConfirmation {
+  id        String           @id @default(cuid())
+  reportId  String
+  report    DisruptionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
 }
 
 model Upvote {
@@ -95,7 +226,10 @@ model Upvote {
   reportId  String
   report    DisruptionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
   userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime         @default(now())
 
   @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
 }
