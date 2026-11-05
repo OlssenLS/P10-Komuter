@@ -7,7 +7,14 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { StationsService } from '../stations/stations.service.js';
 import { CreateReportDto } from './dto/create-report.dto.js';
 import { QueryReportDto } from './dto/query-report.dto.js';
-import { DisruptionReport } from '@prisma/client';
+import {
+  DisruptionReport,
+  ReportCategory,
+  ReportSubCategory,
+  ReportStatus,
+  ReportVisibility,
+  TrackDirectionScope,
+} from '@prisma/client';
 
 export interface DisruptionReportWithDistance extends DisruptionReport {
   distanceMeters?: number;
@@ -98,16 +105,68 @@ export class ReportsService {
       targetStationId = station.id;
     }
 
+    // Initial TTL calculation per category rules:
+    // Crowd = 15m, Delay = 30m, Disruption/Event = 12-24h (24h), Facility = 7d
+    const now = new Date();
+    let ttlMs = 30 * 60 * 1000;
+    switch (dto.category) {
+      case ReportCategory.CROWD:
+        ttlMs = 15 * 60 * 1000;
+        break;
+      case ReportCategory.DELAY:
+        ttlMs = 30 * 60 * 1000;
+        break;
+      case ReportCategory.DISRUPTION:
+      case ReportCategory.EVENT:
+        ttlMs = 24 * 60 * 60 * 1000;
+        break;
+      case ReportCategory.FACILITY:
+        ttlMs = 7 * 24 * 60 * 60 * 1000;
+        break;
+    }
+    const expiresAt = new Date(now.getTime() + ttlMs);
+
+    // Map visibility per category
+    let visibility: ReportVisibility = ReportVisibility.LOCAL_CONTEXTUAL;
+    if (dto.category === ReportCategory.DELAY) {
+      visibility = ReportVisibility.LINE_TARGETED;
+    } else if (
+      dto.category === ReportCategory.DISRUPTION ||
+      dto.category === ReportCategory.EVENT
+    ) {
+      visibility = ReportVisibility.GLOBAL;
+    }
+
+    const subCategory = dto.subCategory ?? dto.severity ?? null;
+    const trackScope = dto.trackScope ?? TrackDirectionScope.DIRECTIONAL;
+
+    const createData: any = {
+      stationId: targetStationId,
+      userId,
+      title: dto.title.trim(),
+      category: dto.category,
+      impactLevel: dto.impactLevel,
+      description: dto.description?.trim() || null,
+      trackScope,
+      destinationStationId: dto.destinationStationId ?? null,
+      destinationLabel: dto.destinationLabel?.trim() ?? null,
+      visibility,
+      expiresAt,
+    };
+
+    if (subCategory) {
+      createData.subCategory = subCategory;
+    }
+    if (lat !== undefined) {
+      createData.userLatitude = lat;
+    }
+    if (lon !== undefined) {
+      createData.userLongitude = lon;
+    }
+
     // Create report in database
     const report = await this.prisma.disruptionReport.create({
-      data: {
-        stationId: targetStationId,
-        userId,
-        title: dto.title.trim(),
-        category: dto.category,
-        impactLevel: dto.impactLevel,
-        description: dto.description?.trim() || null,
-      },
+      data: createData,
       include: {
         station: true,
       },
@@ -215,6 +274,27 @@ export class ReportsService {
       ]);
       return { upvoted: false, message: 'Upvote removed' };
     } else {
+      const currentCount = report.upvoteCount ?? 0;
+      const newUpvoteCount = currentCount + 1;
+      const updateData: any = {
+        upvoteCount: { increment: 1 },
+      };
+
+      // Mark status as VERIFIED when upvotes >= 10
+      if (newUpvoteCount >= 10) {
+        updateData.status = ReportStatus.VERIFIED;
+        updateData.verifiedAt = new Date();
+      }
+
+      // Extend TTL for DELAY reports (15m extension)
+      if (report.category === ReportCategory.DELAY) {
+        const baseTime =
+          report.expiresAt && new Date(report.expiresAt).getTime() > Date.now()
+            ? new Date(report.expiresAt).getTime()
+            : Date.now();
+        updateData.expiresAt = new Date(baseTime + 15 * 60 * 1000);
+      }
+
       await this.prisma.$transaction([
         this.prisma.upvote.create({
           data: {
@@ -224,10 +304,162 @@ export class ReportsService {
         }),
         this.prisma.disruptionReport.update({
           where: { id: reportId },
-          data: { upvoteCount: { increment: 1 } },
+          data: updateData,
         }),
       ]);
       return { upvoted: true, message: 'Report upvoted successfully' };
     }
   }
+
+  /**
+   * GET /report/all
+   * Filter global disruptions/events + destination-indexed line delays + local crowd status.
+   */
+  async getAllReports(query?: {
+    stationId?: string;
+    lineId?: string;
+    destinationStationId?: string;
+  }) {
+    const now = new Date();
+    const activeReports = await this.prisma.disruptionReport.findMany({
+      where: {
+        status: { not: ReportStatus.EXPIRED },
+        OR: [{ expiresAt: { gt: now } }, { expiresAt: null }],
+      },
+      include: {
+        station: true,
+        destinationStation: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 1. Filter global disruptions/events (DISRUPTION, EVENT, or GLOBAL visibility)
+    const globalDisruptions = activeReports.filter(
+      (r) =>
+        r.category === ReportCategory.DISRUPTION ||
+        r.category === ReportCategory.EVENT ||
+        r.visibility === ReportVisibility.GLOBAL,
+    );
+
+    // 2. Destination-indexed line delays (DELAY category)
+    let lineDelays = activeReports.filter((r) => r.category === ReportCategory.DELAY);
+    if (query?.lineId) {
+      lineDelays = lineDelays.filter((r) => r.lineId === query.lineId);
+    }
+    if (query?.destinationStationId) {
+      lineDelays = lineDelays.filter(
+        (r) => r.destinationStationId === query.destinationStationId,
+      );
+    }
+
+    const destinationIndexedDelays: Record<string, DisruptionReport[]> = {};
+    for (const delay of lineDelays) {
+      const key = delay.destinationStationId || delay.destinationLabel || 'unspecified';
+      if (!destinationIndexedDelays[key]) {
+        destinationIndexedDelays[key] = [];
+      }
+      destinationIndexedDelays[key].push(delay);
+    }
+
+    // 3. Local crowd status (CROWD category)
+    let crowdReports = activeReports.filter((r) => r.category === ReportCategory.CROWD);
+    if (query?.stationId) {
+      crowdReports = crowdReports.filter((r) => r.stationId === query.stationId);
+    }
+
+    return {
+      globalDisruptions,
+      lineDelays,
+      destinationIndexedDelays,
+      crowdStatus: crowdReports,
+      reports: activeReports,
+    };
+  }
+
+  /**
+   * GET /stations/:id/reports
+   * Return facility reports and station crowd stats.
+   */
+  async getStationReports(stationId: string) {
+    const station = await this.stationsService.findOne(stationId);
+
+    const reports = await this.prisma.disruptionReport.findMany({
+      where: {
+        stationId,
+        status: { not: ReportStatus.EXPIRED },
+      },
+      include: {
+        station: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Facility reports
+    const facilityReports = reports.filter(
+      (r) => r.category === ReportCategory.FACILITY,
+    );
+
+    // Crowd reports & stats
+    const crowdReports = reports.filter((r) => r.category === ReportCategory.CROWD);
+    const now = Date.now();
+    const recentCrowd = crowdReports.filter(
+      (r) => now - new Date(r.createdAt).getTime() <= 30 * 60 * 1000,
+    );
+
+    const breakdown = {
+      low: 0,
+      normal: 0,
+      high: 0,
+      crowdOverflow: 0,
+    };
+
+    for (const r of recentCrowd) {
+      if (r.subCategory === ReportSubCategory.LOW) breakdown.low++;
+      else if (r.subCategory === ReportSubCategory.NORMAL) breakdown.normal++;
+      else if (r.subCategory === ReportSubCategory.HIGH) breakdown.high++;
+      else if (r.subCategory === ReportSubCategory.CROWD_OVERFLOW) breakdown.crowdOverflow++;
+    }
+
+    const totalRecent = recentCrowd.length;
+    const highRatio =
+      totalRecent > 0 ? (breakdown.high + breakdown.crowdOverflow) / totalRecent : 0;
+    const isCrowdOverflow = totalRecent > 0 && highRatio >= 0.8;
+
+    let currentCrowdLevel: ReportSubCategory = ReportSubCategory.NORMAL;
+    if (breakdown.crowdOverflow > 0 || isCrowdOverflow) {
+      currentCrowdLevel = ReportSubCategory.CROWD_OVERFLOW;
+    } else if (breakdown.high > breakdown.normal && breakdown.high > breakdown.low) {
+      currentCrowdLevel = ReportSubCategory.HIGH;
+    } else if (breakdown.low > breakdown.normal && breakdown.low > breakdown.high) {
+      currentCrowdLevel = ReportSubCategory.LOW;
+    }
+
+    const crowdStats = {
+      stationId: station.id,
+      stationName: station.name,
+      totalReports: crowdReports.length,
+      recentReportsCount: totalRecent,
+      currentCrowdLevel,
+      isCrowdOverflow,
+      breakdown,
+      recentCrowdReports: recentCrowd,
+    };
+
+    return {
+      station: {
+        id: station.id,
+        name: station.name,
+      },
+      facilityReports,
+      crowdStats,
+      reports,
+    };
+  }
 }
+
+export { ReportsService as DisruptionsService };

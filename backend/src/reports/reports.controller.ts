@@ -32,6 +32,26 @@ export class ReportsController {
   }
 
   /**
+   * GET /report/all or GET /reports/all
+   * Filter global disruptions/events + destination-indexed line delays + local crowd status.
+   */
+  @Get('all')
+  @HttpCode(HttpStatus.OK)
+  async getAllReports(@Query() query: any) {
+    return this.reportsService.getAllReports(query);
+  }
+
+  /**
+   * GET /report/stations/:id/reports or GET /reports/stations/:id/reports
+   * Return facility reports and station crowd stats.
+   */
+  @Get('stations/:id/reports')
+  @HttpCode(HttpStatus.OK)
+  async getStationReports(@Param('id') id: string) {
+    return this.reportsService.getStationReports(id);
+  }
+
+  /**
    * GET /report or GET /reports
    * Retrieves disruption reports with optional filtering.
    */
@@ -63,3 +83,5 @@ export class ReportsController {
     return this.reportsService.upvote(id, userId);
   }
 }
+
+export { ReportsController as DisruptionsController };

@@ -1,6 +1,19 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { ReportCategory, DelayImpact } from '@prisma/client';
+import {
+  ReportCategory,
+  ReportSubCategory,
+  DelayImpact,
+  TrackDirectionScope,
+} from '@prisma/client';
 
 export class CreateReportDto {
   @IsOptional()
@@ -17,10 +30,36 @@ export class CreateReportDto {
   category: ReportCategory;
 
   @IsOptional()
+  @IsEnum(ReportSubCategory, {
+    message: `severity must be one of: ${Object.values(ReportSubCategory).join(', ')}`,
+  })
+  severity?: ReportSubCategory;
+
+  @IsOptional()
+  @IsEnum(ReportSubCategory, {
+    message: `subCategory must be one of: ${Object.values(ReportSubCategory).join(', ')}`,
+  })
+  subCategory?: ReportSubCategory;
+
+  @IsOptional()
   @IsEnum(DelayImpact, {
     message: `impactLevel must be one of: ${Object.values(DelayImpact).join(', ')}`,
   })
   impactLevel?: DelayImpact;
+
+  @IsOptional()
+  @IsEnum(TrackDirectionScope, {
+    message: `trackScope must be one of: ${Object.values(TrackDirectionScope).join(', ')}`,
+  })
+  trackScope?: TrackDirectionScope;
+
+  @IsOptional()
+  @IsString()
+  destinationStationId?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationLabel?: string;
 
   @IsOptional()
   @IsString()
@@ -61,3 +100,10 @@ export class CreateReportDto {
   @Type(() => Number)
   radius?: number = 500;
 }
+
+export {
+  ReportCategory,
+  ReportSubCategory,
+  DelayImpact,
+  TrackDirectionScope,
+};

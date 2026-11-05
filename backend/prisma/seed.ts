@@ -14,7 +14,7 @@ async function main() {
 
     if (!existing) {
       await prisma.station.create({
-        data: {
+        data: { 
           name: station.name,
           isTransitHub: station.isTransitHub ?? false,
           supportedTypes: station.supportedTypes,

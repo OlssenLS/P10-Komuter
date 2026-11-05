@@ -97,10 +97,9 @@ enum DelayImpact {
   ENTIRE_LINE
 }
 
-enum ReportDirection {
-  INBOUND
-  OUTBOUND
-  BOTH
+enum TrackDirectionScope {
+  DIRECTIONAL   // Affects travel in a single direction (e.g. towards specific destination terminus)
+  BOTH_WAYS     // Affects both directions / tracks simultaneously
 }
 
 enum ReportVisibility {
@@ -126,9 +125,10 @@ model Station {
   longitude      Float
 
   // Relations for disruption reports
-  reports        DisruptionReport[] @relation("StationReports")
-  fromReports    DisruptionReport[] @relation("FromStationReports")
-  toReports      DisruptionReport[] @relation("ToStationReports")
+  reports            DisruptionReport[] @relation("StationReports")
+  fromReports        DisruptionReport[] @relation("FromStationReports")
+  toReports          DisruptionReport[] @relation("ToStationReports")
+  destinationReports DisruptionReport[] @relation("DestinationStationReports")
 
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -167,10 +167,11 @@ model DisruptionReport {
   lineName            String?            // e.g. "Bogor Line", "Koridor 1 Blok M - Kota"
   transportType       TransportType?
 
-  // Directional Context (Arah Destination)
-  direction           ReportDirection?   // INBOUND, OUTBOUND, BOTH
-  directionLabel      String?            // e.g. "Arah Jakarta Kota", "Arah Bogor", "Arah Blok M"
-  destinationStation  String?            // Destination terminus name
+  // Track & Directional Context
+  trackScope           TrackDirectionScope? @default(DIRECTIONAL) // DIRECTIONAL (single track/heading) or BOTH_WAYS
+  destinationStationId String?                                    // Terminus destination station (e.g. Stasiun Bogor, Rangkasbitung)
+  destinationStation   Station?             @relation("DestinationStationReports", fields: [destinationStationId], references: [id], onDelete: SetNull)
+  destinationLabel     String?                                    // e.g. "Arah Jakarta Kota", "Arah Bogor", "Arah Cikarang via Senen"
 
   // Vehicle Condition (for single vehicle reporting: Line + Direction + Condition)
   vehicleCondition    String?
@@ -202,7 +203,7 @@ model DisruptionReport {
 
   // Composite indexes for duplicate detection and high-frequency feed querying
   @@index([stationId, category, subCategory, status])
-  @@index([lineId, category, subCategory, direction, status])
+  @@index([lineId, category, subCategory, destinationStationId, status])
   @@index([status, expiresAt])
   @@index([visibility, status])
   @@index([userId])

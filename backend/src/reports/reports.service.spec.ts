@@ -105,14 +105,14 @@ describe('ReportsService', () => {
         radius: 500,
       });
       expect(mockPrismaService.disruptionReport.create).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           stationId: 'station-manggarai',
           userId: 'user-456',
           title: 'Severe train delay',
           category: ReportCategory.DELAY,
           impactLevel: DelayImpact.ENTIRE_LINE,
           description: 'Track maintenance issue',
-        },
+        }),
         include: { station: true },
       });
       expect(mockPrismaService.user.update).toHaveBeenCalledWith({
