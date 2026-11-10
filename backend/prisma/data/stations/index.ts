@@ -1,6 +1,7 @@
 import { StationSeedData } from './types.js';
 import { krlStations } from './krl/index.js';
 import { mrtStations } from './mrt/index.js';
+import { lrtJabodebekStations } from './lrt_jabodebek/index.js';
 
 export * from './types.js';
 
@@ -15,6 +16,7 @@ export function getAllStations(): StationSeedData[] {
   const allStationLists: StationSeedData[] = [
     ...krlStations,
     ...mrtStations,
+    ...lrtJabodebekStations
   ];
 
   for (const station of allStationLists) {
