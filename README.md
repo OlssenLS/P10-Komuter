@@ -1,22 +1,20 @@
 # Komuter
 
-A modern full-stack monorepo featuring a **Kotlin Multiplatform (KMP)** mobile application paired with a dedicated **NestJS** authentication backend service.
-
+A modern full-stack monorepo featuring a **Flutter (Material 3)** transit companion mobile application paired with a dedicated **NestJS** backend API and **Supabase Auth**.
 ---
 
 ## 📁 Repository Layout
 
 ```text
 Komuter/
-├── mobile/                  # Kotlin Multiplatform project root
-│   ├── androidApp/          # Android target UI (Jetpack Compose, Material 3)
-│   ├── shared/              # Common business logic, models, Ktor HTTP client, and platform security
-│   ├── iosApp/              # Xcode-ready structure for future iOS target
-│   ├── gradle/              # Gradle wrapper and version catalog (libs.versions.toml)
-│   ├── build.gradle.kts     # Root build script for KMP
-│   └── settings.gradle.kts  # Gradle project inclusions
+├── mobile/                  # Flutter application root (Android & iOS)
+│   ├── lib/                 # Dart source code (core theme, network, features)
+│   ├── android/             # Native Android host & permissions
+│   ├── ios/                 # Native iOS host & permissions
+│   ├── test/                # Unit & widget test suites
+│   └── pubspec.yaml         # Flutter dependencies and configuration
 ├── backend/                 # NestJS Authentication API root
-│   ├── src/                 # Application source code (auth module, users, guards, strategies)
+│   ├── src/                 # Application source code (auth, stations, reports, prisma)
 │   ├── prisma/              # Prisma schema for PostgreSQL database
 │   ├── test/                # End-to-end and unit tests
 │   ├── .env.example         # Template for required environment variables
@@ -33,11 +31,9 @@ Komuter/
 
 ### Prerequisites
 
-- **Java**: JDK 17 or JDK 21 (bundled with Android Studio JBR: `C:\Program Files\Android\Android Studio\jbr`)
-- **Android SDK**: API Level 34/35 installed via Android Studio
+- **Flutter SDK**: 3.22+ (Dart 3.4+)
 - **Node.js**: v18+ (tested on v22.x) and `npm` v9+
 - **PostgreSQL**: Local or containerized PostgreSQL instance (default port 5432)
-
 ---
 
 ### 1. Backend Setup (NestJS)
@@ -75,25 +71,29 @@ Komuter/
 
 ---
 
-### 2. Mobile Setup (Kotlin Multiplatform)
+### 2. Mobile Setup (Flutter)
 
 1. Navigate to the mobile directory:
    ```bash
    cd mobile
    ```
-2. Build all modules and run verification:
+2. Install dependencies:
    ```bash
-   ./gradlew build
-   # or on Windows PowerShell:
-   .\gradlew.bat build
+   flutter pub get
    ```
-3. Run the Android application:
-   - Open the `mobile` directory in **Android Studio**.
-   - Select the `androidApp` run configuration and click **Run**, or run via CLI:
-     ```bash
-     .\gradlew.bat :androidApp:installDebug
-     ```
-
+3. Run tests and static analysis:
+   ```bash
+   flutter analyze
+   flutter test
+   ```
+4. Run the mobile application:
+   ```bash
+   flutter run
+   ```
+   Pass custom backend or Supabase credentials if desired:
+   ```bash
+   flutter run --dart-define=API_URL=http://192.168.0.5:3000 --dart-define=SUPABASE_URL=https://<project>.supabase.co --dart-define=SUPABASE_ANON_KEY=<key>
+   ```
 ---
 
 ## 🔒 Shared API Contracts

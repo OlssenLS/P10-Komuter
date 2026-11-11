@@ -6,8 +6,12 @@ import { ConfigService } from '@nestjs/config';
 export interface JwtPayload {
   sub: string;
   email: string;
-  username: string;
+  username?: string;
   role?: string;
+  user_metadata?: {
+    name?: string;
+    username?: string;
+  };
 }
 
 @Injectable()
@@ -16,7 +20,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_ACCESS_SECRET') || 'komuter_access_secret_key',
+      secretOrKey:
+        configService.get<string>('SUPABASE_JWT_SECRET') ||
+        configService.get<string>('JWT_ACCESS_SECRET') ||
+        'komuter_access_secret_key',
     });
   }
 
@@ -27,7 +34,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     return {
       id: payload.sub,
       email: payload.email,
-      username: payload.username,
+      username:
+        payload.user_metadata?.username || payload.username || payload.email,
       role: payload.role,
     };
   }
