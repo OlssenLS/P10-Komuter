@@ -40,8 +40,7 @@ final createReportControllerProvider =
 class CreateReportController extends StateNotifier<CreateReportState> {
   final ReportRepository _repository;
 
-  CreateReportController(this._repository)
-      : super(const CreateReportState());
+  CreateReportController(this._repository) : super(const CreateReportState());
 
   Future<bool> submitReport(CreateReportRequest req) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
@@ -67,3 +66,10 @@ class CreateReportController extends StateNotifier<CreateReportState> {
     state = const CreateReportState();
   }
 }
+
+/// Provider for live disruptions feed
+final liveFeedProvider =
+    FutureProvider.autoDispose<LiveDisruptionFeedDto>((ref) async {
+  final repo = ref.watch(reportRepositoryProvider);
+  return repo.getFeed();
+});

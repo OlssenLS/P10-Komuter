@@ -1,22 +1,22 @@
 import { StationSeedData } from './types.js';
 import { krlStations } from './krl/index.js';
-import { defaultStations } from './default-stations.js';
+import { mrtStations } from './mrt/index.js';
+import { lrtJabodebekStations } from './lrt_jabodebek/index.js';
 
 export * from './types.js';
-export * from './krl/index.js';
-export * from './default-stations.js';
 
 /**
  * Combines station lists from multiple transit lines.
- * If a station exists on multiple lines (e.g. Manggarai),
- * it automatically merges `lineNames` and `supportedTypes`, and flags `isTransitHub = true`.
+ * Deduplicates by station name, automatically merges lineNames and supportedTypes,
+ * and sets isTransitHub to true if a station serves multiple lines or transport types.
  */
 export function getAllStations(): StationSeedData[] {
-  const stationMap = new Map<string, StationSeedData>();
+  const stationMap = new Map<string, StationSeedData>(  );
 
   const allStationLists: StationSeedData[] = [
-    ...defaultStations,
     ...krlStations,
+    ...mrtStations,
+    ...lrtJabodebekStations
   ];
 
   for (const station of allStationLists) {
@@ -31,7 +31,7 @@ export function getAllStations(): StationSeedData[] {
         new Set([...existing.supportedTypes, ...station.supportedTypes])
       );
       const isTransitHub =
-        existing.isTransitHub || station.isTransitHub || mergedLineNames.length > 1;
+        existing.isTransitHub || station.isTransitHub || mergedLineNames.length > 1 || mergedSupportedTypes.length > 1;
 
       stationMap.set(station.name, {
         ...existing,

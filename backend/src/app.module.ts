@@ -11,7 +11,7 @@ import { ReportsModule } from './reports/reports.module.js';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env', '../.env'],
     }),
     PrismaModule,
     AuthModule,

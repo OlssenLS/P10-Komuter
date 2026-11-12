@@ -15,7 +15,7 @@ class ReportRepository {
 
   Future<DisruptionReportDto> createReport(CreateReportRequest req) async {
     final response = await _dio.post(
-      '/reports',
+      '/report',
       data: req.toJson(),
     );
     return DisruptionReportDto.fromJson(
@@ -23,11 +23,37 @@ class ReportRepository {
     );
   }
 
+  Future<LiveDisruptionFeedDto> getFeed({String? stationId}) async {
+    final response = await _dio.get(
+      '/report/all',
+      queryParameters: stationId != null ? {'stationId': stationId} : null,
+    );
+    return LiveDisruptionFeedDto.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
   Future<List<DisruptionReportDto>> getStationReports(String stationId) async {
-    final response = await _dio.get('/stations/$stationId/reports');
-    final list = response.data as List<dynamic>;
-    return list
-        .map((e) => DisruptionReportDto.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final response = await _dio.get('/report/stations/$stationId/reports');
+    final data = response.data;
+    if (data is Map<String, dynamic> && data['reports'] is List) {
+      return (data['reports'] as List)
+          .map((e) => DisruptionReportDto.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data is List) {
+      return data
+          .map((e) => DisruptionReportDto.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  Future<bool> toggleUpvote(String reportId) async {
+    final response = await _dio.post('/report/$reportId/upvote');
+    if (response.data is Map<String, dynamic>) {
+      return response.data['upvoted'] as bool? ?? true;
+    }
+    return true;
   }
 }

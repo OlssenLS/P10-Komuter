@@ -87,5 +87,38 @@ void main() {
       expect(dto.impactLevel, DelayImpact.entireLine);
       expect(dto.upvoteCount, 4);
     });
+    test('LiveDisruptionFeedDto.fromJson parses valid JSON', () {
+      final json = {
+        'globalDisruptions': [
+          {
+            'id': 'g-1',
+            'stationId': 'st-1',
+            'title': 'Power outage',
+            'category': 'DISRUPTION',
+            'status': 'ACTIVE',
+            'upvoteCount': 10,
+            'createdAt': '2026-11-12T10:00:00Z',
+          }
+        ],
+        'lineDelays': [],
+        'crowdStatus': [],
+        'reports': [
+          {
+            'id': 'g-1',
+            'stationId': 'st-1',
+            'title': 'Power outage',
+            'category': 'DISRUPTION',
+            'status': 'ACTIVE',
+            'upvoteCount': 10,
+            'createdAt': '2026-11-12T10:00:00Z',
+          }
+        ],
+      };
+
+      final feed = LiveDisruptionFeedDto.fromJson(json);
+      expect(feed.globalDisruptions.length, 1);
+      expect(feed.reports.length, 1);
+      expect(feed.globalDisruptions.first.title, 'Power outage');
+    });
   });
 }

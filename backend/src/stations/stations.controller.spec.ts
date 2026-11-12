@@ -5,13 +5,13 @@ import { TransportType } from '@prisma/client';
 
 describe('StationsController', () => {
   let controller: StationsController;
-  let service: StationsService;
 
   const mockStationsService = {
     findNearby: vi.fn(),
     findAll: vi.fn(),
     findOne: vi.fn(),
     create: vi.fn(),
+    findReports: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -28,7 +28,6 @@ describe('StationsController', () => {
     }).compile();
 
     controller = module.get<StationsController>(StationsController);
-    service = module.get<StationsService>(StationsService);
   });
 
   describe('findNearby', () => {
@@ -99,6 +98,17 @@ describe('StationsController', () => {
       const result = await controller.create(dto);
       expect(result).toEqual({ id: 's-2', ...dto });
       expect(mockStationsService.create).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe('findReports', () => {
+    it('should delegate to stationsService.findReports', async () => {
+      const mockReports = [{ id: 'rep-1', title: 'Crowd' }];
+      mockStationsService.findReports.mockResolvedValue(mockReports);
+
+      const result = await controller.findReports('s-1');
+      expect(result).toEqual(mockReports);
+      expect(mockStationsService.findReports).toHaveBeenCalledWith('s-1');
     });
   });
 });

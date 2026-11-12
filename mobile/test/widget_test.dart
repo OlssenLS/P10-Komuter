@@ -22,7 +22,7 @@ void main() {
     await tester.tap(find.text('Report'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Report Disruption'), findsOneWidget);
+    expect(find.text('Live Transit Disruptions'), findsOneWidget);
 
     // Switch to Auth tab
     await tester.tap(find.text('Auth'));
