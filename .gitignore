@@ -9,6 +9,7 @@
 ehthumbs.db
 Thumbs.db
 [Dd]esktop.ini
+*.tsbuildinfo
 
 # ==============================================================================
 # Environment & Secrets
