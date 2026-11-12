@@ -43,19 +43,44 @@ describe('StationsService', () => {
     },
   ];
 
+  let mockTx: any;
   const mockPrismaService = {
     station: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
     },
-    disruptionReport: {
-      findMany: vi.fn(),
+    stationLiveStatus: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
+    disruptionReport: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+    },
+    user: {
+      update: vi.fn().mockResolvedValue({}),
+    },
+    $transaction: vi.fn((callback) => callback(mockTx)),
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
+
+    mockTx = {
+      disruptionReport: {
+        findFirst: vi.fn(),
+        create: vi.fn().mockResolvedValue({}),
+      },
+      stationLiveStatus: {
+        findUnique: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      user: {
+        update: vi.fn().mockResolvedValue({}),
+      },
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -205,26 +230,162 @@ describe('StationsService', () => {
     });
   });
 
-  describe('findReports', () => {
-    it('should return reports for a station', async () => {
-      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
-      const mockReports = [
-        {
-          id: 'rep-1',
-          stationId: 'manggarai-1',
-          title: 'Delay',
-          station: { id: 'manggarai-1', name: 'Stasiun Manggarai' },
-        },
-      ];
-      mockPrismaService.disruptionReport.findMany.mockResolvedValue(mockReports);
+  describe('getStationStatus', () => {
+    it('should compute station live profile, filter expired entries, and calculate crowd level', async () => {
+      const now = new Date();
+      const futureDate = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const expiredDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-      const result = await service.findReports('manggarai-1');
-      expect(result).toEqual(mockReports);
-      expect(mockPrismaService.disruptionReport.findMany).toHaveBeenCalledWith({
-        where: { stationId: 'manggarai-1' },
-        include: { station: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
+      mockPrismaService.station.findUnique.mockResolvedValue({
+        ...mockStations[0],
+        validDestinations: [],
+        liveStatus: {
+          stationId: 'manggarai-1',
+          crowdState: {
+            low: 2,
+            medium: 8,
+            high: 0,
+            very_high: 0,
+            updatedAt: now.toISOString(),
+          },
+          delayState: {
+            'krl-bogor:station-bogor': {
+              minorCount: 3,
+              expiresAt: futureDate,
+            },
+            'krl-bogor:station-depok': {
+              minorCount: 1,
+              expiresAt: expiredDate, // Should be filtered out!
+            },
+          },
+          facilityState: {
+            ESCALATOR: { reportCount: 3, status: 'BROKEN' },
+          },
+          disruptionState: {},
+          updatedAt: now,
+        },
       });
+
+      const result = await service.getStationStatus('manggarai-1');
+      expect(result.station.name).toBe('Stasiun Manggarai');
+      expect(result.crowd.currentCrowdLevel).toBe('NORMAL');
+      expect(result.crowd.isCrowdOverflow).toBe(false);
+      expect(result.delays['krl-bogor:station-bogor']).toBeDefined();
+      expect(result.delays['krl-bogor:station-depok']).toBeUndefined();
+      expect(result.facilities['ESCALATOR']).toBeDefined();
+    });
+
+    it('should zero out crowdState if updatedAt is older than 15 minutes', async () => {
+      const expiredCrowdDate = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+
+      mockPrismaService.station.findUnique.mockResolvedValue({
+        ...mockStations[0],
+        validDestinations: [],
+        liveStatus: {
+          stationId: 'manggarai-1',
+          crowdState: {
+            low: 10,
+            medium: 20,
+            high: 30,
+            very_high: 5,
+            updatedAt: expiredCrowdDate,
+          },
+          delayState: {},
+          facilityState: {},
+          disruptionState: {},
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await service.getStationStatus('manggarai-1');
+      expect(result.crowd.breakdown.low).toBe(0);
+      expect(result.crowd.breakdown.medium).toBe(0);
+      expect(result.crowd.breakdown.high).toBe(0);
+      expect(result.crowd.breakdown.very_high).toBe(0);
+      expect(result.crowd.totalVotes).toBe(0);
+      expect(result.crowd.currentCrowdLevel).toBe('NORMAL');
+    });
+  });
+
+  describe('resolveStationIssue', () => {
+    it('should throw 400 when attempting to resolve CROWD category', async () => {
+      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
+
+      await expect(
+        service.resolveStationIssue('manggarai-1', 'user-123', {
+          category: 'CROWD' as any,
+          targetKey: 'HIGH',
+        }),
+      ).rejects.toThrow(/CROWD reports cannot be resolved/);
+    });
+
+    it('should throw 404 when target issue is not active', async () => {
+      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
+      mockPrismaService.stationLiveStatus.findUnique.mockResolvedValue({
+        stationId: 'manggarai-1',
+        facilityState: {},
+        delayState: {},
+        disruptionState: {},
+      });
+
+      await expect(
+        service.resolveStationIssue('manggarai-1', 'user-123', {
+          category: 'FACILITY' as any,
+          targetKey: 'ESCALATOR',
+        }),
+      ).rejects.toThrow(/No active facility issue found/);
+    });
+
+    it('should increment resolvedCount and clear active entry once threshold reached', async () => {
+      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
+      mockPrismaService.stationLiveStatus.findUnique.mockResolvedValue({
+        stationId: 'manggarai-1',
+        facilityState: {
+          ESCALATOR: { reportCount: 2, resolvedCount: 1, status: 'BROKEN' },
+        },
+        delayState: {},
+        disruptionState: {},
+      });
+      mockTx.disruptionReport.findFirst.mockResolvedValue(null);
+
+      const result = await service.resolveStationIssue('manggarai-1', 'user-123', {
+        category: 'FACILITY' as any,
+        targetKey: 'ESCALATOR',
+      });
+
+      expect(result.status).toBe('SUCCESS');
+      expect(result.cleared).toBe(true);
+      expect(mockTx.disruptionReport.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            isResolution: true,
+          }),
+        }),
+      );
+    });
+
+    it('should reject duplicate resolution within active window', async () => {
+      mockPrismaService.station.findUnique.mockResolvedValue(mockStations[0]);
+      mockPrismaService.stationLiveStatus.findUnique.mockResolvedValue({
+        stationId: 'manggarai-1',
+        facilityState: {
+          ESCALATOR: { reportCount: 2, resolvedCount: 0, status: 'BROKEN' },
+        },
+        delayState: {},
+        disruptionState: {},
+      });
+      mockTx.disruptionReport.findFirst.mockResolvedValue({
+        id: 'res-1',
+        isResolution: true,
+      });
+
+      const result = await service.resolveStationIssue('manggarai-1', 'user-123', {
+        category: 'FACILITY' as any,
+        targetKey: 'ESCALATOR',
+      });
+
+      expect(result.status).toBe('ALREADY_RESOLVED');
+      expect(mockTx.disruptionReport.create).not.toHaveBeenCalled();
     });
   });
 });

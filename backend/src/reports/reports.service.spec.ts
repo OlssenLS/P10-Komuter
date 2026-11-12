@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { ReportsService } from './reports.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StationsService } from '../stations/stations.service.js';
-import { ReportCategory, DelayImpact, ReportStatus, TransportType } from '@prisma/client';
+import { ReportCategory, ReportSubCategory, ReportStatus, TransportType } from '@prisma/client';
 
 describe('ReportsService', () => {
   let service: ReportsService;
@@ -17,6 +17,7 @@ describe('ReportsService', () => {
     lineNames: ['Bogor Line', 'Cikarang Line'],
     latitude: -6.2099,
     longitude: 106.8497,
+    validDestinations: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -25,43 +26,65 @@ describe('ReportsService', () => {
     id: 'report-123',
     stationId: 'station-manggarai',
     userId: 'user-456',
-    title: 'Severe train delay',
     category: ReportCategory.DELAY,
-    status: ReportStatus.NEW,
-    impactLevel: DelayImpact.ENTIRE_LINE,
-    description: 'Track maintenance issue',
-    upvoteCount: 0,
+    subCategory: ReportSubCategory.MAJOR,
+    note: 'Signal fault',
+    status: ReportStatus.ACTIVE,
+    isSkippedOrClosed: false,
+    isResolution: false,
+    userLatitude: -6.2099,
+    userLongitude: 106.8497,
+    expiresAt: new Date(Date.now() + 45 * 60 * 1000),
     createdAt: new Date(),
     updatedAt: new Date(),
-    station: mockStation,
   };
 
+  let mockTx: any;
   const mockPrismaService = {
+    station: {
+      findUnique: vi.fn().mockResolvedValue(mockStation),
+    },
+    stationLiveStatus: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
     disruptionReport: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
-    upvote: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      delete: vi.fn(),
-    },
     user: {
       update: vi.fn().mockResolvedValue({}),
     },
-    $transaction: vi.fn((operations) => Promise.all(operations)),
+    $transaction: vi.fn((callback) => callback(mockTx)),
   };
 
   const mockStationsService = {
-    findNearby: vi.fn(),
     findOne: vi.fn(),
-    calculateHaversineDistanceMeters: vi.fn(),
+    getStationStatus: vi.fn(),
+    calculateHaversineDistanceMeters: vi.fn().mockReturnValue(0),
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
+
+    mockTx = {
+      disruptionReport: {
+        findFirst: vi.fn(),
+        create: vi.fn().mockResolvedValue(mockReport),
+        update: vi.fn().mockResolvedValue(mockReport),
+      },
+      stationLiveStatus: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({}),
+      },
+      user: {
+        update: vi.fn().mockResolvedValue({}),
+      },
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -73,255 +96,191 @@ describe('ReportsService', () => {
 
     service = module.get<ReportsService>(ReportsService);
     stationsService = module.get<StationsService>(StationsService);
+    mockStationsService.findOne.mockResolvedValue(mockStation);
   });
 
   describe('createReport', () => {
-    it('should successfully create a report by resolving the nearest station when coordinates are provided within radius', async () => {
-      mockStationsService.findNearby.mockResolvedValue({
-        isWithinStationRadius: true,
-        radiusMeters: 500,
-        userLocation: { latitude: -6.2099, longitude: 106.8497 },
-        closestStation: {
-          ...mockStation,
-          distanceMeters: 25,
-        },
-        nearbyStations: [{ ...mockStation, distanceMeters: 25 }],
-      });
-
-      mockPrismaService.disruptionReport.create.mockResolvedValue(mockReport);
-
-      const result = await service.createReport('user-456', {
-        title: 'Severe train delay',
-        category: ReportCategory.DELAY,
-        impactLevel: DelayImpact.ENTIRE_LINE,
-        description: 'Track maintenance issue',
-        latitude: -6.2099,
-        longitude: 106.8497,
-      });
-
-      expect(stationsService.findNearby).toHaveBeenCalledWith({
-        latitude: -6.2099,
-        longitude: 106.8497,
-        radius: 500,
-      });
-      expect(mockPrismaService.disruptionReport.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          stationId: 'station-manggarai',
-          userId: 'user-456',
-          title: 'Severe train delay',
-          category: ReportCategory.DELAY,
-          impactLevel: DelayImpact.ENTIRE_LINE,
-          description: 'Track maintenance issue',
-        }),
-        include: { station: true },
-      });
-      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-456' },
-        data: { points: { increment: 10 } },
-      });
-      expect(result.id).toBe('report-123');
-      expect(result.distanceMeters).toBe(25);
-    });
-
-    it('should reject report creation if user is outside allowable radius (> 500m)', async () => {
-      mockStationsService.findNearby.mockResolvedValue({
-        isWithinStationRadius: false,
-        radiusMeters: 500,
-        userLocation: { latitude: -6.3000, longitude: 106.8497 },
-        closestStation: {
-          ...mockStation,
-          distanceMeters: 10020,
-        },
-        nearbyStations: [],
-      });
+    it('should reject when user is farther than 500m from station', async () => {
+      mockStationsService.calculateHaversineDistanceMeters.mockReturnValueOnce(550);
 
       await expect(
         service.createReport('user-456', {
-          title: 'Far report',
+          stationId: 'station-manggarai',
           category: ReportCategory.CROWD,
-          latitude: -6.3000,
-          longitude: 106.8497,
+          subCategory: ReportSubCategory.HIGH,
+          userLatitude: -6.22,
+          userLongitude: 106.86,
         }),
-      ).rejects.toThrow(BadRequestException);
-      expect(mockPrismaService.disruptionReport.create).not.toHaveBeenCalled();
+      ).rejects.toThrow(/outside the required 500m radius/);
     });
 
-    it('should verify station distance if both stationId and coordinates are provided', async () => {
-      mockStationsService.findOne.mockResolvedValue(mockStation);
-      mockStationsService.calculateHaversineDistanceMeters.mockReturnValue(120);
-      mockPrismaService.disruptionReport.create.mockResolvedValue(mockReport);
+    it('should reject DELAY report without destinationStationId', async () => {
+      await expect(
+        service.createReport('user-456', {
+          stationId: 'station-manggarai',
+          category: ReportCategory.DELAY,
+          subCategory: ReportSubCategory.MAJOR,
+          lineId: 'krl-bogor',
+          userLatitude: -6.2099,
+          userLongitude: 106.8497,
+        }),
+      ).rejects.toThrow(/destinationStationId is required/);
+    });
+
+    it('should reject invalid subCategory for category', async () => {
+      await expect(
+        service.createReport('user-456', {
+          stationId: 'station-manggarai',
+          category: ReportCategory.CROWD,
+          subCategory: ReportSubCategory.ESCALATOR, // ESCALATOR belongs to FACILITY!
+          userLatitude: -6.2099,
+          userLongitude: 106.8497,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should create new report and materialize into StationLiveStatus for DELAY', async () => {
+      mockTx.disruptionReport.findFirst.mockResolvedValue(null);
 
       const result = await service.createReport('user-456', {
         stationId: 'station-manggarai',
-        title: 'Platform crowd',
+        category: ReportCategory.DELAY,
+        subCategory: ReportSubCategory.MAJOR,
+        lineId: 'krl-bogor',
+        destinationStationId: 'station-bogor',
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
+        note: 'Antrean panjang kereta',
+      });
+
+      expect(result.status).toBe('SUCCESS');
+      expect(mockTx.disruptionReport.create).toHaveBeenCalled();
+      expect(mockTx.stationLiveStatus.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { stationId: 'station-manggarai' },
+        }),
+      );
+    });
+
+    it('should return ALREADY_REPORTED for duplicate DELAY within window', async () => {
+      mockTx.disruptionReport.findFirst.mockResolvedValue(mockReport);
+
+      const result = await service.createReport('user-456', {
+        stationId: 'station-manggarai',
+        category: ReportCategory.DELAY,
+        subCategory: ReportSubCategory.MAJOR,
+        lineId: 'krl-bogor',
+        destinationStationId: 'station-bogor',
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
+      });
+
+      expect(result.status).toBe('ALREADY_REPORTED');
+      expect(mockTx.disruptionReport.create).not.toHaveBeenCalled();
+    });
+
+    it('should adjust CROWD counters when user changes vote within 15m window', async () => {
+      const existingCrowdReport = {
+        ...mockReport,
         category: ReportCategory.CROWD,
-        latitude: -6.2105,
-        longitude: 106.8497,
+        subCategory: ReportSubCategory.LOW,
+      };
+      mockTx.disruptionReport.findFirst.mockResolvedValue(existingCrowdReport);
+      mockTx.stationLiveStatus.findUnique.mockResolvedValue({
+        stationId: 'station-manggarai',
+        crowdState: { low: 1, medium: 0, high: 0, very_high: 0 },
       });
-
-      expect(stationsService.findOne).toHaveBeenCalledWith('station-manggarai');
-      expect(stationsService.calculateHaversineDistanceMeters).toHaveBeenCalledWith(
-        -6.2105,
-        106.8497,
-        mockStation.latitude,
-        mockStation.longitude,
-      );
-      expect(result.distanceMeters).toBe(120);
-    });
-
-    it('should reject if user provides stationId and coordinates that exceed radius', async () => {
-      mockStationsService.findOne.mockResolvedValue(mockStation);
-      mockStationsService.calculateHaversineDistanceMeters.mockReturnValue(850);
-
-      await expect(
-        service.createReport('user-456', {
-          stationId: 'station-manggarai',
-          title: 'Too far',
-          category: ReportCategory.CROWD,
-          latitude: -6.2200,
-          longitude: 106.8497,
-        }),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(mockPrismaService.disruptionReport.create).not.toHaveBeenCalled();
-    });
-
-    it('should create report directly when stationId is provided without coordinates', async () => {
-      mockStationsService.findOne.mockResolvedValue(mockStation);
-      mockPrismaService.disruptionReport.create.mockResolvedValue(mockReport);
 
       const result = await service.createReport('user-456', {
         stationId: 'station-manggarai',
-        title: 'Direct report with verified station',
-        category: ReportCategory.FACILITY,
+        category: ReportCategory.CROWD,
+        subCategory: ReportSubCategory.HIGH,
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
       });
 
-      expect(stationsService.findOne).toHaveBeenCalledWith('station-manggarai');
-      expect(mockPrismaService.disruptionReport.create).toHaveBeenCalled();
-      expect(result.id).toBe('report-123');
-    });
-
-    it('should throw BadRequestException if neither stationId nor coordinates are provided', async () => {
-      await expect(
-        service.createReport('user-456', {
-          title: 'Missing station info',
-          category: ReportCategory.EVENT,
+      expect(result.status).toBe('SUCCESS');
+      expect(result.action).toBe('CROWD_VOTE_UPDATED');
+      expect(mockTx.stationLiveStatus.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            crowdState: expect.objectContaining({
+              low: 0,
+              high: 1,
+            }),
+          }),
         }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException if only latitude is provided without longitude', async () => {
-      await expect(
-        service.createReport('user-456', {
-          title: 'Partial coordinates',
-          category: ReportCategory.DELAY,
-          latitude: -6.2099,
-        }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw NotFoundException if no stations exist in system', async () => {
-      mockStationsService.findNearby.mockResolvedValue({
-        isWithinStationRadius: false,
-        radiusMeters: 500,
-        userLocation: { latitude: -6.2099, longitude: 106.8497 },
-        closestStation: null,
-        nearbyStations: [],
-      });
-
-      await expect(
-        service.createReport('user-456', {
-          title: 'No stations',
-          category: ReportCategory.DELAY,
-          latitude: -6.2099,
-          longitude: 106.8497,
-        }),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('findAll', () => {
-    it('should return reports matching filter query', async () => {
-      mockPrismaService.disruptionReport.findMany.mockResolvedValue([mockReport]);
-
-      const result = await service.findAll({
-        stationId: 'station-manggarai',
-        category: ReportCategory.DELAY,
-        limit: 10,
-        offset: 0,
-      });
-
-      expect(mockPrismaService.disruptionReport.findMany).toHaveBeenCalledWith({
-        where: {
-          stationId: 'station-manggarai',
-          category: ReportCategory.DELAY,
-        },
-        include: { station: true },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        skip: 0,
-      });
-      expect(result).toEqual([mockReport]);
-    });
-  });
-
-  describe('findById', () => {
-    it('should return single report by ID', async () => {
-      mockPrismaService.disruptionReport.findUnique.mockResolvedValue(mockReport);
-
-      const result = await service.findById('report-123');
-      expect(result).toEqual(mockReport);
-    });
-
-    it('should throw NotFoundException if report not found', async () => {
-      mockPrismaService.disruptionReport.findUnique.mockResolvedValue(null);
-
-      await expect(service.findById('non-existent')).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('findByStationId', () => {
-    it('should return reports for station after verifying station exists', async () => {
-      mockStationsService.findOne.mockResolvedValue(mockStation);
-      mockPrismaService.disruptionReport.findMany.mockResolvedValue([mockReport]);
-
-      const result = await service.findByStationId('station-manggarai');
-      expect(stationsService.findOne).toHaveBeenCalledWith('station-manggarai');
-      expect(result).toEqual([mockReport]);
-    });
-  });
-
-  describe('upvote', () => {
-    it('should add upvote when not previously upvoted', async () => {
-      mockPrismaService.disruptionReport.findUnique.mockResolvedValue(mockReport);
-      mockPrismaService.upvote.findUnique.mockResolvedValue(null);
-
-      const result = await service.upvote('report-123', 'user-456');
-
-      expect(result).toEqual({ upvoted: true, message: 'Report upvoted successfully' });
-      expect(mockPrismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it('should remove upvote when already upvoted', async () => {
-      mockPrismaService.disruptionReport.findUnique.mockResolvedValue(mockReport);
-      mockPrismaService.upvote.findUnique.mockResolvedValue({
-        id: 'upvote-1',
-        reportId: 'report-123',
-        userId: 'user-456',
-      });
-
-      const result = await service.upvote('report-123', 'user-456');
-
-      expect(result).toEqual({ upvoted: false, message: 'Upvote removed' });
-      expect(mockPrismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it('should throw NotFoundException if report not found', async () => {
-      mockPrismaService.disruptionReport.findUnique.mockResolvedValue(null);
-
-      await expect(service.upvote('report-missing', 'user-456')).rejects.toThrow(
-        NotFoundException,
       );
+    });
+
+    it('should flip FACILITY to BROKEN when reportCount reaches 3', async () => {
+      mockTx.disruptionReport.findFirst.mockResolvedValue(null);
+      mockTx.stationLiveStatus.findUnique.mockResolvedValue({
+        stationId: 'station-manggarai',
+        facilityState: {
+          ESCALATOR: { reportCount: 2, status: 'PENDING_QUORUM' },
+        },
+      });
+
+      await service.createReport('user-456', {
+        stationId: 'station-manggarai',
+        category: ReportCategory.FACILITY,
+        subCategory: ReportSubCategory.ESCALATOR,
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
+        note: 'Eskalator peron 3 mati',
+      });
+
+      expect(mockTx.stationLiveStatus.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            facilityState: expect.objectContaining({
+              ESCALATOR: expect.objectContaining({
+                reportCount: 3,
+                status: 'BROKEN',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('getGlobalFeed', () => {
+    it('should return flattened alert cards for active non-expired disruptions', async () => {
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      mockPrismaService.stationLiveStatus.findMany.mockResolvedValue([
+        {
+          stationId: 'station-manggarai',
+          station: mockStation,
+          updatedAt: new Date(),
+          disruptionState: {
+            FLOOD_WEATHER: {
+              status: 'ACTIVE',
+              reportCount: 5,
+              expiresAt: futureDate,
+              isSkippedOrClosed: true,
+              topNote: 'Genangan air',
+              affectedLineIds: ['krl-bogor'],
+            },
+            POWER_SIGNAL: {
+              status: 'PENDING_QUORUM', // Should not be in global feed
+              reportCount: 1,
+              expiresAt: futureDate,
+            },
+          },
+        },
+      ]);
+
+      const feed = await service.getGlobalFeed();
+      expect(feed.length).toBe(1);
+      expect(feed[0]).toMatchObject({
+        stationId: 'station-manggarai',
+        subCategory: ReportSubCategory.FLOOD_WEATHER,
+        status: 'ACTIVE',
+        isSkippedOrClosed: true,
+        reportCount: 5,
+      });
     });
   });
 });

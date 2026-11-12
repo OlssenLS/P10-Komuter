@@ -5,19 +5,90 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StationsService } from '../stations/stations.service.js';
-import { CreateReportDto } from './dto/create-report.dto.js';
+import {
+  CreateReportDto,
+  CategorySubCategoryMap,
+} from './dto/create-report.dto.js';
 import { QueryReportDto } from './dto/query-report.dto.js';
 import {
   DisruptionReport,
   ReportCategory,
   ReportSubCategory,
   ReportStatus,
-  ReportVisibility,
-  TrackDirectionScope,
 } from '@prisma/client';
 
-export interface DisruptionReportWithDistance extends DisruptionReport {
-  distanceMeters?: number;
+export interface DisruptionAlertCard {
+  id: string;
+  stationId: string;
+  stationName: string;
+  category: ReportCategory;
+  subCategory: ReportSubCategory;
+  headline: string;
+  isSkippedOrClosed: boolean;
+  reportCount: number;
+  topNote: string | null;
+  topNotes: string[];
+  affectedLineIds: string[];
+  status: 'ACTIVE';
+  startedAt?: string;
+  expiresAt: string;
+  updatedAt: Date;
+}
+
+const TTL_MAP: Record<ReportCategory, number> = {
+  [ReportCategory.CROWD]: 15 * 60 * 1000,
+  [ReportCategory.DELAY]: 45 * 60 * 1000,
+  [ReportCategory.FACILITY]: 2 * 60 * 60 * 1000,
+  [ReportCategory.DISRUPTION]: 2 * 60 * 60 * 1000,
+};
+
+function getCrowdBucket(
+  subCategory: ReportSubCategory,
+): 'low' | 'medium' | 'high' | 'very_high' {
+  switch (subCategory) {
+    case ReportSubCategory.LOW:
+      return 'low';
+    case ReportSubCategory.NORMAL:
+      return 'medium';
+    case ReportSubCategory.HIGH:
+      return 'high';
+    case ReportSubCategory.VERY_HIGH:
+      return 'very_high';
+    default:
+      return 'medium';
+  }
+}
+
+export function addTopNote(
+  existingNotes: string[] | undefined,
+  newNote: string | null | undefined,
+): string[] {
+  const current = Array.isArray(existingNotes) ? existingNotes : [];
+  if (!newNote || !newNote.trim()) {
+    return current;
+  }
+  const cleanNote = newNote.trim();
+  // Deduplicate case-insensitively
+  const filtered = current.filter(
+    (n) => n.trim().toLowerCase() !== cleanNote.toLowerCase(),
+  );
+  return [cleanNote, ...filtered].slice(0, 3);
+}
+
+export function formatSubCategoryHeadline(
+  stationName: string,
+  subCategory: string,
+): string {
+  const titles: Record<string, string> = {
+    FLOOD_WEATHER: 'Banjir / Cuaca Ekstrem',
+    POWER_SIGNAL: 'Gangguan Listrik / Sinyal',
+    TRACK_INCIDENT: 'Kendala Jalur Rel',
+    FIRE_SMOKE: 'Kebakaran / Asap',
+    STATION_CLOSED: 'Stasiun Ditutup Sementara',
+    MEDICAL_SECURITY: 'Darurat Medis / Keamanan',
+  };
+  const label = titles[subCategory] || subCategory.replace(/_/g, ' ');
+  return `${label} di ${stationName}`;
 }
 
 @Injectable()
@@ -28,168 +99,463 @@ export class ReportsService {
   ) {}
 
   /**
-   * Creates a new disruption report.
-   * Validates that the report is submitted within the allowable radius of a station:
-   * - If coordinates are provided without stationId: resolves the closest station and verifies it is within radius.
-   * - If both stationId and coordinates are provided: verifies that user coordinates are within radius of that station.
-   * - If stationId is provided without coordinates: validates station existence.
+   * POST /report
+   * Atomic Write Engine (inside prisma.$transaction):
+   * 1. Validate subCategory belongs to category.
+   * 2. 500m Haversine geofence verification.
+   * 3. Strict DELAY validation: destinationStationId + lineName required and validated.
+   * 4. Idempotency & Anti-Spam: Check DisruptionReport for active record within TTL window.
+   * 5. Materialize into StationLiveStatus (upsert on stationId) with standardized topNotes[].
    */
-  async createReport(
-    userId: string,
-    dto: CreateReportDto,
-  ): Promise<DisruptionReportWithDistance> {
-    const lat = dto.latitude ?? dto.userLatitude;
-    const lon = dto.longitude ?? dto.userLongitude;
-    const hasCoordinates = lat !== undefined || lon !== undefined;
-    const hasStationId = Boolean(dto.stationId && dto.stationId.trim().length > 0);
-
-    // Coordinate completeness check
-    if ((lat !== undefined && lon === undefined) || (lat === undefined && lon !== undefined)) {
+  async createReport(userId: string, dto: CreateReportDto) {
+    // 1. Strict Category <-> SubCategory validation
+    const allowedSubCategories = CategorySubCategoryMap[dto.category];
+    if (!allowedSubCategories || !allowedSubCategories.includes(dto.subCategory)) {
       throw new BadRequestException(
-        'Both latitude and longitude must be provided for location verification.',
+        `subCategory "${dto.subCategory}" is not allowed for category "${dto.category}". Valid options: ${allowedSubCategories?.join(', ') || 'none'}`,
       );
     }
 
-    // Must provide either stationId or coordinates
-    if (!hasStationId && !hasCoordinates) {
+    // 2. Target station existence and 500m Haversine Geofence Check
+    const station = await this.stationsService.findOne(dto.stationId);
+    const distanceMeters = this.stationsService.calculateHaversineDistanceMeters(
+      dto.userLatitude,
+      dto.userLongitude,
+      station.latitude,
+      station.longitude,
+    );
+
+    const MAX_GEOFENCE_METERS = 500;
+    if (distanceMeters > MAX_GEOFENCE_METERS) {
       throw new BadRequestException(
-        'Either stationId or user location coordinates (latitude and longitude) must be provided.',
+        `You are outside the required 500m radius of station "${station.name}" (${distanceMeters}m away). Live reports can only be submitted within station radius.`,
       );
     }
 
-    const radius = dto.radius ?? 500;
-    let targetStationId: string;
-    let resolvedDistance: number | undefined;
+    // 3. Strict DELAY validation
+    const lineInput = (dto.lineName || dto.lineId)?.trim() || null;
+    let validatedDestStation: any = null;
 
-    if (hasCoordinates && !hasStationId) {
-      // Find nearest station and check if it is within radius
-      const nearbyResult = await this.stationsService.findNearby({
-        latitude: lat!,
-        longitude: lon!,
-        radius,
+    if (dto.category === ReportCategory.DELAY) {
+      if (!dto.destinationStationId || !dto.destinationStationId.trim()) {
+        throw new BadRequestException(
+          'destinationStationId is required when reporting a DELAY.',
+        );
+      }
+
+      if (!lineInput) {
+        throw new BadRequestException(
+          'lineName is required when reporting a DELAY.',
+        );
+      }
+
+      // Check destination station exists
+      validatedDestStation = await this.prisma.station.findUnique({
+        where: { id: dto.destinationStationId.trim() },
       });
 
-      if (!nearbyResult.closestStation) {
-        throw new NotFoundException('No stations registered in the transit network.');
-      }
-
-      if (!nearbyResult.isWithinStationRadius) {
+      if (!validatedDestStation) {
         throw new BadRequestException(
-          `You are not within the required ${radius}m radius of any station. Closest station is "${nearbyResult.closestStation.name}" (${nearbyResult.closestStation.distanceMeters}m away). Live disruption reports can only be submitted near a station.`,
+          `Destination station with ID "${dto.destinationStationId}" was not found.`,
         );
       }
 
-      targetStationId = nearbyResult.closestStation.id;
-      resolvedDistance = nearbyResult.closestStation.distanceMeters;
-    } else if (hasCoordinates && hasStationId) {
-      // Station specified with user coordinates: verify distance to this station
-      const station = await this.stationsService.findOne(dto.stationId!.trim());
-      const distanceMeters = this.stationsService.calculateHaversineDistanceMeters(
-        lat!,
-        lon!,
-        station.latitude,
-        station.longitude,
-      );
+      // Check destination against station.validDestinations if configured
+      const validDestinations = Array.isArray(station.validDestinations)
+        ? (station.validDestinations as any[])
+        : [];
 
-      if (distanceMeters > radius) {
-        throw new BadRequestException(
-          `You are outside the required ${radius}m radius of station "${station.name}" (${distanceMeters}m away). Live disruption reports can only be submitted within station radius.`,
+      if (validDestinations.length > 0) {
+        const isValidDest = validDestinations.some(
+          (d) =>
+            d === validatedDestStation.id ||
+            d?.id === validatedDestStation.id ||
+            (typeof d === 'string' &&
+              d.toLowerCase() === validatedDestStation.name.toLowerCase()) ||
+            d?.name?.toLowerCase() === validatedDestStation.name.toLowerCase(),
         );
+
+        if (!isValidDest) {
+          throw new BadRequestException(
+            `Station "${validatedDestStation.name}" is not a valid destination/terminus for "${station.name}".`,
+          );
+        }
       }
 
-      targetStationId = station.id;
-      resolvedDistance = distanceMeters;
-    } else {
-      // Station specified without coordinates (client previously verified proximity)
-      const station = await this.stationsService.findOne(dto.stationId!.trim());
-      targetStationId = station.id;
+      // Check line against station.lineNames if configured
+      const stationLines = station.lineNames || [];
+      if (stationLines.length > 0) {
+        const cleanInput = lineInput
+          .toLowerCase()
+          .replace(/^(krl|mrt|lrt|tj)-/i, '')
+          .replace(/\s+/g, '-');
+
+        const isValidLine = stationLines.some((l) => {
+          const cleanLine = l
+            .toLowerCase()
+            .replace(/^(krl|mrt|lrt|tj)-/i, '')
+            .replace(/\s+/g, '-');
+
+          return (
+            cleanLine === cleanInput ||
+            cleanLine.includes(cleanInput) ||
+            cleanInput.includes(cleanLine)
+          );
+        });
+
+        if (!isValidLine) {
+          throw new BadRequestException(
+            `Station "${station.name}" does not serve line "${lineInput}". Served lines: ${stationLines.join(', ')}`,
+          );
+        }
+      }
     }
 
-    // Initial TTL calculation per category rules:
-    // Crowd = 15m, Delay = 30m, Disruption/Event = 12-24h (24h), Facility = 7d
     const now = new Date();
-    let ttlMs = 30 * 60 * 1000;
-    switch (dto.category) {
-      case ReportCategory.CROWD:
-        ttlMs = 15 * 60 * 1000;
-        break;
-      case ReportCategory.DELAY:
-        ttlMs = 30 * 60 * 1000;
-        break;
-      case ReportCategory.DISRUPTION:
-      case ReportCategory.EVENT:
-        ttlMs = 24 * 60 * 60 * 1000;
-        break;
-      case ReportCategory.FACILITY:
-        ttlMs = 7 * 24 * 60 * 60 * 1000;
-        break;
-    }
+    const ttlMs = TTL_MAP[dto.category];
+    const windowStart = new Date(now.getTime() - ttlMs);
     const expiresAt = new Date(now.getTime() + ttlMs);
 
-    // Map visibility per category
-    let visibility: ReportVisibility = ReportVisibility.LOCAL_CONTEXTUAL;
-    if (dto.category === ReportCategory.DELAY) {
-      visibility = ReportVisibility.LINE_TARGETED;
-    } else if (
-      dto.category === ReportCategory.DISRUPTION ||
-      dto.category === ReportCategory.EVENT
-    ) {
-      visibility = ReportVisibility.GLOBAL;
-    }
+    return this.prisma.$transaction(async (tx) => {
+      // 4. Idempotency & Anti-Spam check
+      const whereClause: any = {
+        userId,
+        stationId: dto.stationId,
+        category: dto.category,
+        isResolution: false,
+        createdAt: { gte: windowStart },
+      };
 
-    const subCategory = dto.subCategory ?? dto.severity ?? null;
-    const trackScope = dto.trackScope ?? TrackDirectionScope.DIRECTIONAL;
+      if (dto.category === ReportCategory.DELAY) {
+        whereClause.lineId = lineInput;
+        whereClause.destinationStationId = dto.destinationStationId?.trim() || null;
+      } else if (
+        dto.category === ReportCategory.FACILITY ||
+        dto.category === ReportCategory.DISRUPTION
+      ) {
+        whereClause.subCategory = dto.subCategory;
+      }
 
-    const createData: any = {
-      stationId: targetStationId,
-      userId,
-      title: dto.title.trim(),
-      category: dto.category,
-      impactLevel: dto.impactLevel,
-      description: dto.description?.trim() || null,
-      trackScope,
-      destinationStationId: dto.destinationStationId ?? null,
-      destinationLabel: dto.destinationLabel?.trim() ?? null,
-      visibility,
-      expiresAt,
-    };
+      const existingReport = await tx.disruptionReport.findFirst({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+      });
 
-    if (subCategory) {
-      createData.subCategory = subCategory;
-    }
-    if (lat !== undefined) {
-      createData.userLatitude = lat;
-    }
-    if (lon !== undefined) {
-      createData.userLongitude = lon;
-    }
+      if (existingReport) {
+        // CROWD branch: update vote and adjust counters
+        if (dto.category === ReportCategory.CROWD) {
+          const oldBucket = getCrowdBucket(existingReport.subCategory);
+          const newBucket = getCrowdBucket(dto.subCategory);
 
-    // Create report in database
-    const report = await this.prisma.disruptionReport.create({
-      data: createData,
+          const updatedReport = await tx.disruptionReport.update({
+            where: { id: existingReport.id },
+            data: {
+              subCategory: dto.subCategory,
+              note: dto.note !== undefined ? (dto.note?.trim() || null) : existingReport.note,
+              userLatitude: dto.userLatitude,
+              userLongitude: dto.userLongitude,
+              expiresAt,
+            },
+          });
+
+          const liveStatus = await tx.stationLiveStatus.findUnique({
+            where: { stationId: dto.stationId },
+          });
+
+          const crowdState = (liveStatus?.crowdState as Record<string, any>) || {
+            low: 0,
+            medium: 0,
+            high: 0,
+            very_high: 0,
+          };
+
+          if (oldBucket !== newBucket) {
+            crowdState[oldBucket] = Math.max(0, (Number(crowdState[oldBucket]) || 1) - 1);
+            crowdState[newBucket] = (Number(crowdState[newBucket]) || 0) + 1;
+          }
+          crowdState.updatedAt = now.toISOString();
+
+          await tx.stationLiveStatus.upsert({
+            where: { stationId: dto.stationId },
+            create: {
+              stationId: dto.stationId,
+              crowdState,
+              delayState: {},
+              facilityState: {},
+              disruptionState: {},
+            },
+            update: {
+              crowdState,
+            },
+          });
+
+          return {
+            status: 'SUCCESS',
+            action: 'CROWD_VOTE_UPDATED',
+            report: updatedReport,
+          };
+        }
+
+        // DELAY, FACILITY, DISRUPTION branch: return 200 OK with ALREADY_REPORTED
+        return {
+          status: 'ALREADY_REPORTED',
+          message: `You have already submitted an active ${dto.category.toLowerCase()} report for this target.`,
+        };
+      }
+
+      // 5. Create DisruptionReport row (Audit Log)
+      const reportStatus =
+        dto.category === ReportCategory.DISRUPTION
+          ? ReportStatus.PENDING_QUORUM
+          : ReportStatus.ACTIVE;
+
+      const newReport = await tx.disruptionReport.create({
+        data: {
+          userId,
+          stationId: dto.stationId,
+          category: dto.category,
+          subCategory: dto.subCategory,
+          note: dto.note?.trim() || null,
+          lineId: lineInput,
+          destinationStationId: dto.destinationStationId?.trim() || null,
+          isSkippedOrClosed: dto.isSkippedOrClosed ?? false,
+          isResolution: false,
+          userLatitude: dto.userLatitude,
+          userLongitude: dto.userLongitude,
+          status: reportStatus,
+          expiresAt,
+        },
+      });
+
+      // 6. Materialize into StationLiveStatus with standardized topNotes[]
+      const liveStatus = await tx.stationLiveStatus.findUnique({
+        where: { stationId: dto.stationId },
+      });
+
+      const crowdState = (liveStatus?.crowdState as Record<string, any>) || {
+        low: 0,
+        medium: 0,
+        high: 0,
+        very_high: 0,
+      };
+      const delayState = (liveStatus?.delayState as Record<string, any>) || {};
+      const facilityState = (liveStatus?.facilityState as Record<string, any>) || {};
+      const disruptionState = (liveStatus?.disruptionState as Record<string, any>) || {};
+
+      if (dto.category === ReportCategory.CROWD) {
+        const bucket = getCrowdBucket(dto.subCategory);
+        crowdState[bucket] = (Number(crowdState[bucket]) || 0) + 1;
+        crowdState.updatedAt = now.toISOString();
+      } else if (dto.category === ReportCategory.DELAY) {
+        // No ALL:ALL fallback: lineInput and destinationStationId are guaranteed
+        const delayKey = `${lineInput}:${validatedDestStation.id}`;
+
+        const currentDelay = delayState[delayKey] || {
+          lineName: lineInput,
+          lineId: lineInput,
+          destinationStationId: validatedDestStation.id,
+          destinationName: validatedDestStation.name,
+          minorCount: 0,
+          mediumCount: 0,
+          majorCount: 0,
+          resolvedCount: 0,
+          topNotes: [],
+          expiresAt: expiresAt.toISOString(),
+        };
+
+        if (dto.subCategory === ReportSubCategory.MINOR) {
+          currentDelay.minorCount = (Number(currentDelay.minorCount) || 0) + 1;
+        } else if (dto.subCategory === ReportSubCategory.MEDIUM) {
+          currentDelay.mediumCount = (Number(currentDelay.mediumCount) || 0) + 1;
+        } else if (dto.subCategory === ReportSubCategory.MAJOR) {
+          currentDelay.majorCount = (Number(currentDelay.majorCount) || 0) + 1;
+        }
+
+        // Deduplicate and cap topNotes to 3
+        currentDelay.topNotes = addTopNote(currentDelay.topNotes, dto.note);
+        currentDelay.expiresAt = expiresAt.toISOString();
+        delayState[delayKey] = currentDelay;
+      } else if (dto.category === ReportCategory.FACILITY) {
+        const facilityKey = dto.subCategory;
+        const currentFacility = facilityState[facilityKey] || {
+          subCategory: dto.subCategory,
+          reportCount: 0,
+          resolvedCount: 0,
+          status: 'PENDING_QUORUM',
+          topNote: null,
+          topNotes: [],
+          lastReportedAt: now.toISOString(),
+        };
+
+        currentFacility.reportCount = (Number(currentFacility.reportCount) || 0) + 1;
+        currentFacility.status =
+          currentFacility.reportCount >= 3 ? 'BROKEN' : 'PENDING_QUORUM';
+
+        // Standardize topNotes array (deduplicated, max 3)
+        currentFacility.topNotes = addTopNote(currentFacility.topNotes, dto.note);
+        currentFacility.topNote = currentFacility.topNotes[0] || null;
+        currentFacility.lastReportedAt = now.toISOString();
+        facilityState[facilityKey] = currentFacility;
+      } else if (dto.category === ReportCategory.DISRUPTION) {
+        const disruptionKey = dto.subCategory;
+        const currentDisruption = disruptionState[disruptionKey] || {
+          subCategory: dto.subCategory,
+          reportCount: 0,
+          resolvedCount: 0,
+          status: 'PENDING_QUORUM',
+          isSkippedOrClosed: false,
+          affectedLineIds: [],
+          topNote: null,
+          topNotes: [],
+          startedAt: now.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        };
+
+        currentDisruption.reportCount =
+          (Number(currentDisruption.reportCount) || 0) + 1;
+
+        if (dto.isSkippedOrClosed) {
+          currentDisruption.isSkippedOrClosed = true;
+        }
+
+        if (lineInput) {
+          const lines: string[] = Array.isArray(currentDisruption.affectedLineIds)
+            ? currentDisruption.affectedLineIds
+            : [];
+          if (!lines.includes(lineInput)) {
+            lines.push(lineInput);
+          }
+          currentDisruption.affectedLineIds = lines;
+        }
+
+        // Standardize topNotes array (deduplicated, max 3)
+        currentDisruption.topNotes = addTopNote(currentDisruption.topNotes, dto.note);
+        currentDisruption.topNote = currentDisruption.topNotes[0] || null;
+        currentDisruption.expiresAt = expiresAt.toISOString();
+        currentDisruption.status =
+          currentDisruption.reportCount >= 3 ? 'ACTIVE' : 'PENDING_QUORUM';
+        disruptionState[disruptionKey] = currentDisruption;
+      }
+
+      await tx.stationLiveStatus.upsert({
+        where: { stationId: dto.stationId },
+        create: {
+          stationId: dto.stationId,
+          crowdState,
+          delayState,
+          facilityState,
+          disruptionState,
+        },
+        update: {
+          crowdState,
+          delayState,
+          facilityState,
+          disruptionState,
+        },
+      });
+
+      // 7. Reward commuter points
+      if (userId) {
+        await tx.user
+          .update({
+            where: { id: userId },
+            data: { points: { increment: 10 } },
+          })
+          .catch(() => null);
+      }
+
+      return {
+        status: 'SUCCESS',
+        report: newReport,
+      };
+    });
+  }
+
+  /**
+   * GET /report/feed/global
+   * Clean O(1) Read Endpoint:
+   * Queries StationLiveStatus where disruptionState has any entry with status === "ACTIVE" and expiresAt > now.
+   * Flattens into clean disruption alert cards.
+   */
+  async getGlobalFeed(): Promise<DisruptionAlertCard[]> {
+    const now = new Date();
+    const liveStatuses = await this.prisma.stationLiveStatus.findMany({
       include: {
         station: true,
       },
     });
 
-    // Reward commuter with points (best-effort)
-    if (userId) {
-      await this.prisma.user
-        .update({
-          where: { id: userId },
-          data: { points: { increment: 10 } },
-        })
-        .catch(() => null);
+    const cards: DisruptionAlertCard[] = [];
+
+    for (const live of liveStatuses) {
+      const disruptionState = (live.disruptionState as Record<string, any>) || {};
+      for (const [subCat, entry] of Object.entries(disruptionState)) {
+        if (
+          entry &&
+          entry.status === 'ACTIVE' &&
+          entry.expiresAt &&
+          new Date(entry.expiresAt) > now
+        ) {
+          const topNotes = Array.isArray(entry.topNotes)
+            ? entry.topNotes
+            : entry.topNote
+              ? [entry.topNote]
+              : [];
+
+          cards.push({
+            id: `${live.stationId}-${subCat}`,
+            stationId: live.stationId,
+            stationName: live.station.name,
+            category: ReportCategory.DISRUPTION,
+            subCategory: subCat as ReportSubCategory,
+            headline: formatSubCategoryHeadline(live.station.name, subCat),
+            isSkippedOrClosed: Boolean(entry.isSkippedOrClosed),
+            reportCount: Number(entry.reportCount) || 0,
+            topNote: entry.topNote || topNotes[0] || null,
+            topNotes,
+            affectedLineIds: Array.isArray(entry.affectedLineIds)
+              ? entry.affectedLineIds
+              : [],
+            status: 'ACTIVE',
+            startedAt: entry.startedAt,
+            expiresAt: entry.expiresAt,
+            updatedAt: live.updatedAt,
+          });
+        }
+      }
+    }
+
+    // Sort by reportCount desc
+    cards.sort((a, b) => b.reportCount - a.reportCount);
+
+    return cards;
+  }
+
+  /**
+   * GET /report/all
+   */
+  async getAllReports(query?: { stationId?: string }) {
+    const globalFeed = await this.getGlobalFeed();
+    let stationStatus = null;
+    if (query?.stationId) {
+      stationStatus = await this.stationsService.getStationStatus(query.stationId);
     }
 
     return {
-      ...report,
-      ...(resolvedDistance !== undefined ? { distanceMeters: resolvedDistance } : {}),
+      globalFeed,
+      stationStatus,
     };
   }
 
   /**
-   * Fetches disruption reports with optional filtering.
+   * GET /report/stations/:id/reports
+   */
+  async getStationReports(stationId: string) {
+    return this.stationsService.getStationStatus(stationId);
+  }
+
+  /**
+   * GET /report
    */
   async findAll(query?: QueryReportDto): Promise<DisruptionReport[]> {
     const where: any = {};
@@ -209,7 +575,7 @@ export class ReportsService {
   }
 
   /**
-   * Fetches a single disruption report by ID.
+   * GET /report/:id
    */
   async findById(id: string): Promise<DisruptionReport> {
     const report = await this.prisma.disruptionReport.findUnique({
@@ -224,241 +590,6 @@ export class ReportsService {
     }
 
     return report;
-  }
-
-  /**
-   * Fetches all disruption reports for a specific station.
-   */
-  async findByStationId(stationId: string): Promise<DisruptionReport[]> {
-    await this.stationsService.findOne(stationId);
-
-    return this.prisma.disruptionReport.findMany({
-      where: { stationId },
-      include: {
-        station: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  /**
-   * Toggles upvote on a disruption report.
-   */
-  async upvote(reportId: string, userId: string) {
-    const report = await this.prisma.disruptionReport.findUnique({
-      where: { id: reportId },
-    });
-
-    if (!report) {
-      throw new NotFoundException(`Disruption report with ID "${reportId}" was not found`);
-    }
-
-    const existingUpvote = await this.prisma.upvote.findUnique({
-      where: {
-        reportId_userId: {
-          reportId,
-          userId,
-        },
-      },
-    });
-
-    if (existingUpvote) {
-      await this.prisma.$transaction([
-        this.prisma.upvote.delete({
-          where: { id: existingUpvote.id },
-        }),
-        this.prisma.disruptionReport.update({
-          where: { id: reportId },
-          data: { upvoteCount: { decrement: 1 } },
-        }),
-      ]);
-      return { upvoted: false, message: 'Upvote removed' };
-    } else {
-      const currentCount = report.upvoteCount ?? 0;
-      const newUpvoteCount = currentCount + 1;
-      const updateData: any = {
-        upvoteCount: { increment: 1 },
-      };
-
-      // Mark status as VERIFIED when upvotes >= 10
-      if (newUpvoteCount >= 10) {
-        updateData.status = ReportStatus.VERIFIED;
-        updateData.verifiedAt = new Date();
-      }
-
-      // Extend TTL for DELAY reports (15m extension)
-      if (report.category === ReportCategory.DELAY) {
-        const baseTime =
-          report.expiresAt && new Date(report.expiresAt).getTime() > Date.now()
-            ? new Date(report.expiresAt).getTime()
-            : Date.now();
-        updateData.expiresAt = new Date(baseTime + 15 * 60 * 1000);
-      }
-
-      await this.prisma.$transaction([
-        this.prisma.upvote.create({
-          data: {
-            reportId,
-            userId,
-          },
-        }),
-        this.prisma.disruptionReport.update({
-          where: { id: reportId },
-          data: updateData,
-        }),
-      ]);
-      return { upvoted: true, message: 'Report upvoted successfully' };
-    }
-  }
-
-  /**
-   * GET /report/all
-   * Filter global disruptions/events + destination-indexed line delays + local crowd status.
-   */
-  async getAllReports(query?: {
-    stationId?: string;
-    lineId?: string;
-    destinationStationId?: string;
-  }) {
-    const now = new Date();
-    const activeReports = await this.prisma.disruptionReport.findMany({
-      where: {
-        status: { not: ReportStatus.EXPIRED },
-        OR: [{ expiresAt: { gt: now } }, { expiresAt: null }],
-      },
-      include: {
-        station: true,
-        destinationStation: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // 1. Filter global disruptions/events (DISRUPTION, EVENT, or GLOBAL visibility)
-    const globalDisruptions = activeReports.filter(
-      (r) =>
-        r.category === ReportCategory.DISRUPTION ||
-        r.category === ReportCategory.EVENT ||
-        r.visibility === ReportVisibility.GLOBAL,
-    );
-
-    // 2. Destination-indexed line delays (DELAY category)
-    let lineDelays = activeReports.filter((r) => r.category === ReportCategory.DELAY);
-    if (query?.lineId) {
-      lineDelays = lineDelays.filter((r) => r.lineId === query.lineId);
-    }
-    if (query?.destinationStationId) {
-      lineDelays = lineDelays.filter(
-        (r) => r.destinationStationId === query.destinationStationId,
-      );
-    }
-
-    const destinationIndexedDelays: Record<string, DisruptionReport[]> = {};
-    for (const delay of lineDelays) {
-      const key = delay.destinationStationId || delay.destinationLabel || 'unspecified';
-      if (!destinationIndexedDelays[key]) {
-        destinationIndexedDelays[key] = [];
-      }
-      destinationIndexedDelays[key].push(delay);
-    }
-
-    // 3. Local crowd status (CROWD category)
-    let crowdReports = activeReports.filter((r) => r.category === ReportCategory.CROWD);
-    if (query?.stationId) {
-      crowdReports = crowdReports.filter((r) => r.stationId === query.stationId);
-    }
-
-    return {
-      globalDisruptions,
-      lineDelays,
-      destinationIndexedDelays,
-      crowdStatus: crowdReports,
-      reports: activeReports,
-    };
-  }
-
-  /**
-   * GET /stations/:id/reports
-   * Return facility reports and station crowd stats.
-   */
-  async getStationReports(stationId: string) {
-    const station = await this.stationsService.findOne(stationId);
-
-    const reports = await this.prisma.disruptionReport.findMany({
-      where: {
-        stationId,
-        status: { not: ReportStatus.EXPIRED },
-      },
-      include: {
-        station: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Facility reports
-    const facilityReports = reports.filter(
-      (r) => r.category === ReportCategory.FACILITY,
-    );
-
-    // Crowd reports & stats
-    const crowdReports = reports.filter((r) => r.category === ReportCategory.CROWD);
-    const now = Date.now();
-    const recentCrowd = crowdReports.filter(
-      (r) => now - new Date(r.createdAt).getTime() <= 30 * 60 * 1000,
-    );
-
-    const breakdown = {
-      low: 0,
-      normal: 0,
-      high: 0,
-      crowdOverflow: 0,
-    };
-
-    for (const r of recentCrowd) {
-      if (r.subCategory === ReportSubCategory.LOW) breakdown.low++;
-      else if (r.subCategory === ReportSubCategory.NORMAL) breakdown.normal++;
-      else if (r.subCategory === ReportSubCategory.HIGH) breakdown.high++;
-      else if (r.subCategory === ReportSubCategory.CROWD_OVERFLOW) breakdown.crowdOverflow++;
-    }
-
-    const totalRecent = recentCrowd.length;
-    const highRatio =
-      totalRecent > 0 ? (breakdown.high + breakdown.crowdOverflow) / totalRecent : 0;
-    const isCrowdOverflow = totalRecent > 0 && highRatio >= 0.8;
-
-    let currentCrowdLevel: ReportSubCategory = ReportSubCategory.NORMAL;
-    if (breakdown.crowdOverflow > 0 || isCrowdOverflow) {
-      currentCrowdLevel = ReportSubCategory.CROWD_OVERFLOW;
-    } else if (breakdown.high > breakdown.normal && breakdown.high > breakdown.low) {
-      currentCrowdLevel = ReportSubCategory.HIGH;
-    } else if (breakdown.low > breakdown.normal && breakdown.low > breakdown.high) {
-      currentCrowdLevel = ReportSubCategory.LOW;
-    }
-
-    const crowdStats = {
-      stationId: station.id,
-      stationName: station.name,
-      totalReports: crowdReports.length,
-      recentReportsCount: totalRecent,
-      currentCrowdLevel,
-      isCrowdOverflow,
-      breakdown,
-      recentCrowdReports: recentCrowd,
-    };
-
-    return {
-      station: {
-        id: station.id,
-        name: station.name,
-      },
-      facilityReports,
-      crowdStats,
-      reports,
-    };
   }
 }
 

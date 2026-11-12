@@ -1,109 +1,114 @@
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
-  Max,
-  Min,
+  MaxLength,
+  registerDecorator,
+  ValidationArguments,
+  ValidationOptions,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  ReportCategory,
-  ReportSubCategory,
-  DelayImpact,
-  TrackDirectionScope,
-} from '@prisma/client';
+import { ReportCategory, ReportSubCategory } from '@prisma/client';
+
+export const CategorySubCategoryMap: Record<ReportCategory, ReportSubCategory[]> = {
+  [ReportCategory.CROWD]: [
+    ReportSubCategory.LOW,
+    ReportSubCategory.NORMAL,
+    ReportSubCategory.HIGH,
+    ReportSubCategory.VERY_HIGH,
+  ],
+  [ReportCategory.DELAY]: [
+    ReportSubCategory.MINOR,
+    ReportSubCategory.MEDIUM,
+    ReportSubCategory.MAJOR,
+  ],
+  [ReportCategory.FACILITY]: [
+    ReportSubCategory.ESCALATOR,
+    ReportSubCategory.LIFT,
+    ReportSubCategory.TAP_IN_OUT_GATE,
+    ReportSubCategory.TOILET,
+  ],
+  [ReportCategory.DISRUPTION]: [
+    ReportSubCategory.FLOOD_WEATHER,
+    ReportSubCategory.POWER_SIGNAL,
+    ReportSubCategory.TRACK_INCIDENT,
+    ReportSubCategory.FIRE_SMOKE,
+    ReportSubCategory.STATION_CLOSED,
+    ReportSubCategory.MEDICAL_SECURITY,
+  ],
+};
+
+export function IsValidSubCategoryForCategory(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidSubCategoryForCategory',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const obj = args.object as any;
+          const category = obj.category as ReportCategory;
+          if (!category || !value) return false;
+          const validSubCategories = CategorySubCategoryMap[category];
+          return Array.isArray(validSubCategories) && validSubCategories.includes(value);
+        },
+        defaultMessage(args: ValidationArguments) {
+          const obj = args.object as any;
+          return `subCategory "${args.value}" is not valid for category "${obj.category}". Valid options: ${CategorySubCategoryMap[obj.category as ReportCategory]?.join(', ') || 'none'}`;
+        },
+      },
+    });
+  };
+}
 
 export class CreateReportDto {
-  @IsOptional()
-  @IsString()
-  stationId?: string;
-
   @IsString()
   @IsNotEmpty()
-  title: string;
+  stationId: string;
 
   @IsEnum(ReportCategory, {
     message: `category must be one of: ${Object.values(ReportCategory).join(', ')}`,
   })
   category: ReportCategory;
 
-  @IsOptional()
-  @IsEnum(ReportSubCategory, {
-    message: `severity must be one of: ${Object.values(ReportSubCategory).join(', ')}`,
-  })
-  severity?: ReportSubCategory;
-
-  @IsOptional()
   @IsEnum(ReportSubCategory, {
     message: `subCategory must be one of: ${Object.values(ReportSubCategory).join(', ')}`,
   })
-  subCategory?: ReportSubCategory;
+  @IsValidSubCategoryForCategory()
+  subCategory: ReportSubCategory;
+
+  @IsNumber()
+  @Type(() => Number)
+  userLatitude: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  userLongitude: number;
 
   @IsOptional()
-  @IsEnum(DelayImpact, {
-    message: `impactLevel must be one of: ${Object.values(DelayImpact).join(', ')}`,
-  })
-  impactLevel?: DelayImpact;
+  @IsString()
+  lineName?: string;
 
   @IsOptional()
-  @IsEnum(TrackDirectionScope, {
-    message: `trackScope must be one of: ${Object.values(TrackDirectionScope).join(', ')}`,
-  })
-  trackScope?: TrackDirectionScope;
+  @IsString()
+  lineId?: string;
 
   @IsOptional()
   @IsString()
   destinationStationId?: string;
 
   @IsOptional()
-  @IsString()
-  destinationLabel?: string;
+  @IsBoolean()
+  isSkippedOrClosed?: boolean;
 
   @IsOptional()
   @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(-90)
-  @Max(90)
-  @Type(() => Number)
-  latitude?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(-180)
-  @Max(180)
-  @Type(() => Number)
-  longitude?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(-90)
-  @Max(90)
-  @Type(() => Number)
-  userLatitude?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(-180)
-  @Max(180)
-  @Type(() => Number)
-  userLongitude?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(50000)
-  @Type(() => Number)
-  radius?: number = 500;
+  @MaxLength(120)
+  note?: string;
 }
 
-export {
-  ReportCategory,
-  ReportSubCategory,
-  DelayImpact,
-  TrackDirectionScope,
-};
+export { ReportCategory, ReportSubCategory };

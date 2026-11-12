@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StationsController } from './stations.controller.js';
 import { StationsService } from './stations.service.js';
-import { TransportType } from '@prisma/client';
+import { ReportCategory, TransportType } from '@prisma/client';
 
 describe('StationsController', () => {
   let controller: StationsController;
@@ -12,6 +12,8 @@ describe('StationsController', () => {
     findOne: vi.fn(),
     create: vi.fn(),
     findReports: vi.fn(),
+    getStationStatus: vi.fn(),
+    resolveStationIssue: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -51,6 +53,7 @@ describe('StationsController', () => {
           latitude: -6.2099,
           longitude: 106.8497,
           distanceMeters: 0,
+          validDestinations: [],
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -62,6 +65,44 @@ describe('StationsController', () => {
       const result = await controller.findNearby(dto);
       expect(result).toBe(expectedResponse);
       expect(mockStationsService.findNearby).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe('getStatus', () => {
+    it('should delegate to stationsService.getStationStatus', async () => {
+      const mockStatus = {
+        station: { id: 's-1', name: 'Manggarai' },
+        crowd: {},
+        delays: {},
+        facilities: {},
+        disruptions: {},
+      };
+      mockStationsService.getStationStatus.mockResolvedValue(mockStatus);
+
+      const result = await controller.getStatus('s-1');
+      expect(result).toBe(mockStatus);
+      expect(mockStationsService.getStationStatus).toHaveBeenCalledWith('s-1');
+    });
+  });
+
+  describe('resolveIssue', () => {
+    it('should delegate to stationsService.resolveStationIssue with authenticated user', async () => {
+      const mockReq = { user: { id: 'user-1' } };
+      const dto = {
+        category: ReportCategory.FACILITY,
+        targetKey: 'ESCALATOR',
+      };
+      const expectedResult = {
+        status: 'SUCCESS',
+        action: 'CLEARED',
+        cleared: true,
+        targetKey: 'ESCALATOR',
+      };
+      mockStationsService.resolveStationIssue.mockResolvedValue(expectedResult);
+
+      const result = await controller.resolveIssue(mockReq, 's-1', dto);
+      expect(result).toBe(expectedResult);
+      expect(mockStationsService.resolveStationIssue).toHaveBeenCalledWith('s-1', 'user-1', dto);
     });
   });
 
@@ -103,7 +144,7 @@ describe('StationsController', () => {
 
   describe('findReports', () => {
     it('should delegate to stationsService.findReports', async () => {
-      const mockReports = [{ id: 'rep-1', title: 'Crowd' }];
+      const mockReports = [{ id: 'rep-1', note: 'Crowd' }];
       mockStationsService.findReports.mockResolvedValue(mockReports);
 
       const result = await controller.findReports('s-1');

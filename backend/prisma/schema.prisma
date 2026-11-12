@@ -21,11 +21,7 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  reports               DisruptionReport[]     @relation("ReportAuthor")
-  upvotes               Upvote[]
-  facilityConfirmations FacilityConfirmation[]
-  resolvedReports       DisruptionReport[]     @relation("ReportResolver")
-  verifiedReports       DisruptionReport[]     @relation("ReportVerifier")
+  reports            DisruptionReport[] @relation("ReportAuthor")
 
   @@map("users")
 }
@@ -50,7 +46,6 @@ enum ReportCategory {
   DELAY       // Train/bus schedule delays
   FACILITY    // Broken station facilities & amenities
   DISRUPTION  // Operational emergencies: closures, flooding, signal failure
-  EVENT       // Mass gatherings, CFD, marathons, protests
 }
 
 enum ReportSubCategory {
@@ -58,9 +53,7 @@ enum ReportSubCategory {
   LOW
   NORMAL
   HIGH
-  CROWD_OVERFLOW
-  THEFT
-  HARASSMENT
+  VERY_HIGH
 
   // Delay Subcategories
   MINOR               // < 5 minutes
@@ -71,166 +64,100 @@ enum ReportSubCategory {
   ESCALATOR
   LIFT
   TAP_IN_OUT_GATE
-  AIR_CONDITIONER
   TOILET
-  SAFETY_SECURITY
 
   // Disruption Subcategories (Operational Emergencies)
-  STATION_CLOSURE
-  TRACK_FLOODING
-  STATION_FLOODING
-  SIGNAL_FAILURE
-  POWER_OUTAGE
-  FIRE_ACCIDENT
-
-  // Event Subcategories
-  DEMONSTRATION
-  CAR_FREE_DAY
-  CONCERT
-  OTHER
-}
-
-enum DelayImpact {
-  SINGLE_VEHICLE
-  STATION_ONLY
-  LINE_SECTION
-  ENTIRE_LINE
-}
-
-enum TrackDirectionScope {
-  DIRECTIONAL   // Affects travel in a single direction (e.g. towards specific destination terminus)
-  BOTH_WAYS     // Affects both directions / tracks simultaneously
-}
-
-enum ReportVisibility {
-  LOCAL_CONTEXTUAL // Station page & nearby commuters (Crowd, Facility)
-  LINE_TARGETED    // Overlapping commuter routes (Delay)
-  GLOBAL           // Global live disruption feed & system banners (Disruptions, Events)
+  FLOOD_WEATHER
+  POWER_SIGNAL
+  TRACK_INCIDENT
+  FIRE_SMOKE
+  STATION_CLOSED
+  MEDICAL_SECURITY
 }
 
 enum ReportStatus {
-  NEW
-  VERIFIED
-  RESOLVED
-  EXPIRED
+  PENDING_QUORUM      // 1-2 reports (waiting for 3-user quorum)
+  ACTIVE              // Confirmed live state (visible on feeds)
+  RESOLVED            // Cleared by "Sudah Normal" consensus
+  EXPIRED             // Passed TTL
 }
 
 model Station {
-  id             String             @id @default(cuid())
-  name           String 
-  isTransitHub   Boolean            @default(false)
-  supportedTypes TransportType[]
-  lineNames      String[]
-  latitude       Float
-  longitude      Float
+  id                String             @id @default(cuid())
+  name              String 
+  isTransitHub      Boolean            @default(false)
+  supportedTypes    TransportType[]
+  lineNames         String[]
+  latitude          Float
+  longitude         Float
+  validDestinations Json               @default("[]")
 
   // Relations for disruption reports
+  liveStatus         StationLiveStatus?
   reports            DisruptionReport[] @relation("StationReports")
-  fromReports        DisruptionReport[] @relation("FromStationReports")
-  toReports          DisruptionReport[] @relation("ToStationReports")
   destinationReports DisruptionReport[] @relation("DestinationStationReports")
 
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model StationLiveStatus {
+  stationId       String   @id
+  station         Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  // { low: number, medium: number, high: number, very_high: number, updatedAt: ISOString }
+  crowdState      Json     @default("{}")
+
+  // Map<"{lineId}:{destinationId}", { destinationName, minorCount, mediumCount, majorCount, topNotes: string[], expiresAt }>
+  delayState      Json     @default("{}")
+
+  // Map<FacilitySubCategory, { status: "OPERATIONAL" | "BROKEN", reportCount, resolvedCount, topNote, lastConfirmedAt }>
+  facilityState   Json     @default("{}")
+
+  // Map<DisruptionSubCategory, { status: "PENDING_QUORUM" | "ACTIVE", reportCount, resolvedCount, isSkippedOrClosed, affectedLineIds: string[], topNote, startedAt, expiresAt }>
+  disruptionState Json     @default("{}")
+
+  updatedAt       DateTime @updatedAt
+
+  @@map("station_live_statuses")
 }
 
 model DisruptionReport {
-  id                  String             @id @default(cuid())
+  id                   String            @id @default(cuid())
   
-  // Reporter & Moderation Audit
-  userId              String
-  user                User               @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
-  verifiedById        String?
-  verifiedBy          User?              @relation("ReportVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
-  verifiedAt          DateTime?
-  resolvedById        String?
-  resolvedBy          User?              @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
-  resolvedAt          DateTime?
-
-  // Category & Subcategory Classification
-  category            ReportCategory
-  subCategory         ReportSubCategory?
-  title               String
-  description         String?
-
-  // Scope & Spatial Context
-  impactLevel         DelayImpact?       // Scope: SINGLE_VEHICLE, STATION_ONLY, LINE_SECTION, ENTIRE_LINE
-  stationId           String?            // Station where disruption occurs or reporting station
-  station             Station?           @relation("StationReports", fields: [stationId], references: [id], onDelete: SetNull)
-  fromStationId       String?            // Start station for LINE_SECTION scope
-  fromStation         Station?           @relation("FromStationReports", fields: [fromStationId], references: [id], onDelete: SetNull)
-  toStationId         String?            // End station for LINE_SECTION scope
-  toStation           Station?           @relation("ToStationReports", fields: [toStationId], references: [id], onDelete: SetNull)
+  // Reporter & Audit
+  userId               String
+  user                 User              @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
   
-  // Line & Route Context
-  lineId              String?            // e.g. "bogor-line", "tj-koridor-1"
-  lineName            String?            // e.g. "Bogor Line", "Koridor 1 Blok M - Kota"
-  transportType       TransportType?
+  // Classification
+  category             ReportCategory
+  subCategory          ReportSubCategory
+  note                 String?           @db.VarChar(120) // Optional 1-line commuter context (replaces free-text title)
 
-  // Track & Directional Context
-  trackScope           TrackDirectionScope? @default(DIRECTIONAL) // DIRECTIONAL (single track/heading) or BOTH_WAYS
-  destinationStationId String?                                    // Terminus destination station (e.g. Stasiun Bogor, Rangkasbitung)
-  destinationStation   Station?             @relation("DestinationStationReports", fields: [destinationStationId], references: [id], onDelete: SetNull)
-  destinationLabel     String?                                    // e.g. "Arah Jakarta Kota", "Arah Bogor", "Arah Cikarang via Senen"
+  // Spatial & Directional Context
+  stationId            String
+  station              Station           @relation("StationReports", fields: [stationId], references: [id], onDelete: Cascade)
+  lineId               String?           // e.g. "krl-bogor", "tj-koridor-9"
+  destinationStationId String?           // System-constrained terminus for DELAY
+  destinationStation   Station?          @relation("DestinationStationReports", fields: [destinationStationId], references: [id], onDelete: SetNull)
+  
+  // Action Flags
+  isSkippedOrClosed    Boolean           @default(false) // True if station is bypassed/closed due to disruption
+  isResolution         Boolean           @default(false) // True if user tapped "Sudah Normal"
 
-  // Vehicle Condition (for single vehicle reporting: Line + Direction + Condition)
-  vehicleCondition    String?
+  // Geofence Audit
+  userLatitude         Float?
+  userLongitude        Float?
 
-  // Geolocation of reporter (Haversine geofence audit)
-  userLatitude        Float?
-  userLongitude       Float?
+  // Lifecycle
+  status               ReportStatus      @default(ACTIVE)
+  expiresAt            DateTime
 
-  // Event Multimodal & Network Reach
-  affectedStationIds  String[]           @default([])
-  affectedLineIds     String[]           @default([])
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
-  // Lifecycle, TTL & Expiration Decay
-  status              ReportStatus       @default(NEW)
-  visibility          ReportVisibility   @default(LOCAL_CONTEXTUAL)
-  expiresAt           DateTime?          // Dynamic TTL: Crowd 15m, Delay 45m, Facility 7d, Disruption/Event 24h
-  lastConfirmedAt     DateTime?          // Timestamp for Facility confirmation decay ("Masih Rusak?")
-  confirmationCount   Int                @default(0) // Count of "Masih Rusak?" confirmations
-  isBlocked           Boolean            @default(false) // Flags impacted station/track as blocked in routing engine
-  isCrowdOverflow     Boolean            @default(false) // Triggered if 80% High reports in 30min window
-
-  // Community Interactions
-  upvotes             Upvote[]
-  upvoteCount         Int                @default(0)
-  facilityConfirmations FacilityConfirmation[]
-
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-
-  // Composite indexes for duplicate detection and high-frequency feed querying
-  @@index([stationId, category, subCategory, status])
-  @@index([lineId, category, subCategory, destinationStationId, status])
-  @@index([status, expiresAt])
-  @@index([visibility, status])
-  @@index([userId])
-}
-
-model FacilityConfirmation {
-  id        String           @id @default(cuid())
-  reportId  String
-  report    DisruptionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-
-  @@unique([reportId, userId])
-  @@index([reportId])
-  @@index([userId])
-}
-
-model Upvote {
-  id        String           @id @default(cuid())
-  reportId  String
-  report    DisruptionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-
-  @@unique([reportId, userId])
-  @@index([reportId])
-  @@index([userId])
+  // Fast Idempotency & Cooldown Check (1 report per user per station/category window)
+  @@index([userId, stationId, category, createdAt])
+  @@index([stationId, category, status, expiresAt])
+  @@map("disruption_reports")
 }

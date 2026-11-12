@@ -1,35 +1,35 @@
 # Komutin — Live Disruption Integration Guide
+**Architecture: Station-Centric Materialized State Engine (Event Sourcing + Live Profile)**
 
-Welcome to the **Komutin Live Disruption** API reference and integration guide. This document details how to integrate reporting, upvoting, station status views, and global disruption feeds into the mobile/web UI.
+Welcome to the **Komutin Live Disruption** backend integration guide for the Flutter migration (`feat/live-disruptions-flutter`). This document outlines how live station states, reporting, symmetric resolution, and global feeds work.
+
+> [!NOTE]
+> **EVENT Section Status**: The `EVENT` category (mass gatherings, car-free days, concerts, protests) is currently **WIP (Work In Progress)** and is omitted from active station state processing. The live reporting engine currently focuses on operational states: `CROWD`, `DELAY`, `FACILITY`, and `DISRUPTION`.
 
 ---
 
-## 1. Overview
+## 1. Architectural Model
 
-### a. Visibility Levels
-- **Global (`GLOBAL`)**: `DISRUPTION` and `EVENT` categories. Displayed on the main global live disruption feed and active route banners.
-- **Line-Targeted (`LINE_TARGETED`)**: `DELAY` category. Indexed by line and destination station (`destinationStationId` / `destinationLabel`). Surfaced to commuters whose route overlaps with the line/section.
-- **Local / Contextual (`LOCAL_CONTEXTUAL`)**: `CROWD` and `FACILITY` categories. Excluded from the main global feed. Shown only in the **Station Status** tab or when a user is physically at the station/routing through it.
+Rather than running slow, duplicated aggregation queries over raw report tickets on every read, Komutin uses a **Station-Centric Materialized State Engine**:
+1. **Immutable Audit Log (`DisruptionReport`)**: Stores raw commuter submissions with geocoordinates, line context, and resolution flags.
+2. **Materialized Live Profile (`StationLiveStatus`)**: Maintains an $O(1)$ materialized JSON profile for each station:
+   - `crowdState`: Commuter crowd voting counts `{ low, medium, high, very_high, updatedAt }`.
+   - `delayState`: Destination-indexed delay counts, top notes, and dynamic expiration.
+   - `facilityState`: Subcategory-keyed facility health with 3-user consensus quorum (`PENDING_QUORUM` vs `BROKEN`).
+   - `disruptionState`: Critical emergency alerts with 3-user quorum (`PENDING_QUORUM` vs `ACTIVE`), affected lines, and station bypass flags.
 
-### b. Expiration & Time-To-Live (TTL)
-| Category | Default TTL | Behavior / Expiration Logic |
-| :--- | :--- | :--- |
-| **`CROWD`** | 15 Minutes | Expires automatically. 80%+ "High" reports in 30 mins trigger `CROWD_OVERFLOW`. |
-| **`DELAY`** | 30 Minutes | Each upvote extends `expiresAt` by **+15 minutes**. |
-| **`FACILITY`** | 7 Days | Stored under Station Details. Auto-expires if unconfirmed after 7 days. |
-| **`DISRUPTION`** | 24 Hours | Critical emergency alerts (e.g., Station Closure, Signal Failure). |
-| **`EVENT`** | 24 Hours | System-wide events (e.g., CFD, Protests, Concerts). |
-
-### c. Geofencing & Location Verification
-- Submitting a report requires the user to be within **500 meters** of the specified station.
-- If the frontend passes `userLatitude` and `userLongitude` without a `stationId`, the backend automatically resolves the closest station within 500m.
-- Upvoting is **not** geofenced and can be done straight from the feeds.
+```
+[ Commuter Submits Report ]
+            │
+            ├──> 1. Haversine Check (<= 500m radius)
+            ├──> 2. Idempotency & Cooldown Verification
+            ├──> 3. Write DisruptionReport (Audit Row)
+            └──> 4. Atomic O(1) Upsert into StationLiveStatus (Materialized State)
+```
 
 ---
 
 ## 2. Enums Reference
-
-Make sure to align your frontend types/interfaces with the following Prisma enums:
 
 ```typescript
 export enum ReportCategory {
@@ -37,7 +37,7 @@ export enum ReportCategory {
   DELAY = 'DELAY',
   FACILITY = 'FACILITY',
   DISRUPTION = 'DISRUPTION',
-  EVENT = 'EVENT'
+  // Note: EVENT is currently WIP
 }
 
 export enum ReportSubCategory {
@@ -45,273 +45,300 @@ export enum ReportSubCategory {
   LOW = 'LOW',
   NORMAL = 'NORMAL',
   HIGH = 'HIGH',
-  CROWD_OVERFLOW = 'CROWD_OVERFLOW',
-  
+  VERY_HIGH = 'VERY_HIGH',
+
   // DELAY
-  MINOR = 'MINOR',   // < 5 mins
-  MEDIUM = 'MEDIUM', // 5-15 mins
-  MAJOR = 'MAJOR',   // > 15 mins
+  MINOR = 'MINOR',   // < 5 minutes
+  MEDIUM = 'MEDIUM', // 5 - 15 minutes
+  MAJOR = 'MAJOR',   // > 15 minutes
 
   // FACILITY
   ESCALATOR = 'ESCALATOR',
   LIFT = 'LIFT',
-  TAP_GATE = 'TAP_GATE',
-  AC = 'AC',
+  TAP_IN_OUT_GATE = 'TAP_IN_OUT_GATE',
   TOILET = 'TOILET',
-  SAFETY_SECURITY = 'SAFETY_SECURITY',
 
   // DISRUPTION
-  STATION_CLOSURE = 'STATION_CLOSURE',
-  TRACK_FLOODING = 'TRACK_FLOODING',
-  STATION_FLOODING = 'STATION_FLOODING',
-  SIGNAL_FAILURE = 'SIGNAL_FAILURE',
-  POWER_OUTAGE = 'POWER_OUTAGE',
-  ACCIDENT = 'ACCIDENT',
-
-  // EVENT
-  DEMONSTRATION = 'DEMONSTRATION',
-  CAR_FREE_DAY = 'CAR_FREE_DAY',
-  CONCERT = 'CONCERT',
-  ROUTE_ALTERATION = 'ROUTE_ALTERATION'
-}
-
-export enum ImpactLevel {
-  SINGLE_VEHICLE = 'SINGLE_VEHICLE',
-  STATION_ONLY = 'STATION_ONLY',
-  LINE_SECTION = 'LINE_SECTION',
-  ENTIRE_LINE = 'ENTIRE_LINE'
-}
-
-export enum TrackDirectionScope {
-  DIRECTIONAL = 'DIRECTIONAL',
-  BOTH_WAYS = 'BOTH_WAYS'
+  FLOOD_WEATHER = 'FLOOD_WEATHER',
+  POWER_SIGNAL = 'POWER_SIGNAL',
+  TRACK_INCIDENT = 'TRACK_INCIDENT',
+  FIRE_SMOKE = 'FIRE_SMOKE',
+  STATION_CLOSED = 'STATION_CLOSED',
+  MEDICAL_SECURITY = 'MEDICAL_SECURITY',
 }
 
 export enum ReportStatus {
-  ACTIVE = 'ACTIVE',
-  VERIFIED = 'VERIFIED', // Set automatically when upvoteCount >= 10
-  RESOLVED = 'RESOLVED',
-  EXPIRED = 'EXPIRED'
+  PENDING_QUORUM = 'PENDING_QUORUM', // 1-2 reports (waiting for quorum)
+  ACTIVE = 'ACTIVE',                 // 3+ reports confirmed live
+  RESOLVED = 'RESOLVED',             // Cleared by consensus
+  EXPIRED = 'EXPIRED',               // Passed TTL window
 }
 ```
 
 ---
 
-## 3. Directional Context UI Mapping
+## 3. Anti-Spam Windows & State Quorum Rules
 
-Do **NOT** present raw backend/internal values like `INBOUND` or `OUTBOUND` to users. Map them cleanly to destination labels:
+### a. Time-to-Live (TTL) & Anti-Spam Windows
+| Category | Window / TTL | Idempotency / Anti-Spam Behavior |
+| :--- | :--- | :--- |
+| **`CROWD`** | 15 Minutes | If a user votes again within 15 minutes, their vote bucket is updated and the station counters are shifted (decrement old bucket, increment new bucket). Single vote per user. |
+| **`DELAY`** | 45 Minutes | Single report per user per line and destination direction within 45m. Duplicate reports return `200 OK` with `{ status: "ALREADY_REPORTED" }`. |
+| **`FACILITY`** | 2 Hours | Single report per user per facility subcategory within 2h. Duplicate reports return `200 OK` with `{ status: "ALREADY_REPORTED" }`. |
+| **`DISRUPTION`** | 2 Hours | Single report per user per emergency subcategory within 2h. Duplicate reports return `200 OK` with `{ status: "ALREADY_REPORTED" }`. |
 
-* **KRL Bogor Line**:
-  * Inbound Direction $\rightarrow$ `"Arah Jakarta Kota"`
-  * Outbound Direction $\rightarrow$ `"Arah Bogor"`
-  * Both Directions $\rightarrow$ Set `trackScope: "BOTH_WAYS"`
-* **TransJakarta Corridor 1**:
-  * Inbound Direction $\rightarrow$ `"Arah Kota"`
-  * Outbound Direction $\rightarrow$ `"Arah Blok M"`
+### b. Quorum Consensus
+- **Activation Quorum**:
+  - `FACILITY`: Starts as `PENDING_QUORUM`. When `reportCount >= 3`, flips to `BROKEN`.
+  - `DISRUPTION`: Starts as `PENDING_QUORUM`. When `reportCount >= 3`, flips to `ACTIVE` and is broadcast on the global feed.
+- **Resolution Quorum**:
+  - When users submit `POST /stations/:id/resolve`, `resolvedCount` increments.
+  - When `resolvedCount >= 3` (or `resolvedCount >= reportCount`), the active issue is **immediately purged** from `StationLiveStatus`.
+
+### c. 15-Minute Crowd Decay
+- `crowdState` automatically decays on read: if `updatedAt` is older than 15 minutes, crowd counters zero out and `currentCrowdLevel` defaults back to `NORMAL`.
+
+### d. Deduplicated `topNotes`
+- All notes across `DELAY`, `FACILITY`, and `DISRUPTION` are standardized as `topNotes: string[]` capped to the **3 most recent distinct notes** (case-insensitively deduplicated).
 
 ---
 
 ## 4. Endpoints Specifications
 
-### Base Path & Headers
-- Base URL Prefix: `/report` or `/reports` (or `/disruptions`)
-- Auth Header: `Authorization: Bearer <JWT_TOKEN>` *(Required for POST endpoints)*
+### Base URL & Authentication
+- Base URL: `http://<SERVER_IP>:3000`
+- Auth Header: `Authorization: Bearer <JWT_ACCESS_TOKEN>` *(Required on POST)*
 
 ---
 
-### a. Submit a Disruption Report
-- **Endpoint**: `POST /report`
-- **Auth Required**: Yes (`JwtAuthGuard`)
-- **Success Status**: `201 Created`
+### A. Submit a Live Disruption Report
+- **Method & Route**: `POST /report`
+- **Auth**: Required (`JwtAuthGuard`)
+- **Geofence Check**: User coordinates must be within **500 meters** of the station; otherwise returns `400 Bad Request`.
 
-#### Payload (`CreateReportDto`)
+#### Request Body (`CreateReportDto`)
 ```json
 {
-  "title": "Gangguan Sinyal Kebayoran",
-  "category": "DISRUPTION",
-  "subCategory": "SIGNAL_FAILURE",
-  "impactLevel": "LINE_SECTION",
-  "stationId": "station-uuid-123",            // Optional if user coordinates are provided
-  "userLatitude": -6.2384,                     // Latitude (or "latitude")
-  "userLongitude": 106.7845,                   // Longitude (or "longitude")
-  "radius": 500,                               // Optional, defaults to 500m
-  "trackScope": "DIRECTIONAL",                 // "DIRECTIONAL" | "BOTH_WAYS"
-  "destinationStationId": "station-uuid-456",  // Optional target station
-  "destinationLabel": "Arah Tanah Abang",      // UI directional label
-  "description": "Kereta tertahan di luar stasiun Kebayoran."
+  "stationId": "cmw4tswkz0005vpj4cngldh1x",
+  "category": "DELAY",
+  "subCategory": "MEDIUM",
+  "userLatitude": -6.186,
+  "userLongitude": 106.8326,
+  "lineName": "Bogor Line",
+  "destinationStationId": "cmw4tswml000nvpj4v0r3196m",
+  "note": "Antrean sinyal masuk stasiun",
+  "isSkippedOrClosed": false
 }
 ```
+
+#### Category-Specific Field Rules:
+- **`CROWD`**: Requires `stationId`, `category`, `subCategory` (`LOW` | `NORMAL` | `HIGH` | `VERY_HIGH`), `userLatitude`, `userLongitude`.
+- **`DELAY`**: Strictly requires `destinationStationId` and `lineName` (or `lineId`). Rejects `"ALL:ALL"` fallbacks. Validates destination against `Station.validDestinations` and line against `Station.lineNames`.
+- **`FACILITY`**: Requires facility `subCategory` (`ESCALATOR`, `LIFT`, `TAP_IN_OUT_GATE`, `TOILET`).
+- **`DISRUPTION`**: Requires disruption `subCategory`. Optional `isSkippedOrClosed: true` flags train bypasses.
+
+#### Success Responses
+1. **Fresh Report**:
+   ```json
+   {
+     "status": "SUCCESS",
+     "report": {
+       "id": "cmw50ab...",
+       "stationId": "cmw4tswkz0005vpj4cngldh1x",
+       "userId": "usr-123",
+       "category": "DELAY",
+       "subCategory": "MEDIUM",
+       "note": "Antrean sinyal masuk stasiun",
+       "lineId": "Bogor Line",
+       "destinationStationId": "cmw4tswml000nvpj4v0r3196m",
+       "isSkippedOrClosed": false,
+       "isResolution": false,
+       "status": "ACTIVE",
+       "expiresAt": "2026-11-12T16:00:00.000Z",
+       "createdAt": "2026-11-12T15:15:00.000Z"
+     }
+   }
+   ```
+2. **Crowd Vote Shift**:
+   ```json
+   {
+     "status": "SUCCESS",
+     "action": "CROWD_VOTE_UPDATED",
+     "report": { ... }
+   }
+   ```
+3. **Duplicate Submission Within Window**:
+   ```json
+   {
+     "status": "ALREADY_REPORTED",
+     "message": "You have already submitted an active delay report for this target."
+   }
+   ```
+
+---
+
+### B. Fetch Station Live Profile ($O(1)$ Flutter Tab View)
+- **Method & Route**: `GET /stations/:id/status`
+- **Auth**: None (Public)
+- **Path Parameter**: `id` - Station ID
 
 #### Success Response Example
 ```json
 {
-  "id": "report-uuid-999",
-  "stationId": "station-uuid-123",
-  "userId": "user-uuid-888",
-  "title": "Gangguan Sinyal Kebayoran",
-  "category": "DISRUPTION",
-  "subCategory": "SIGNAL_FAILURE",
-  "impactLevel": "LINE_SECTION",
-  "trackScope": "DIRECTIONAL",
-  "destinationStationId": "station-uuid-456",
-  "destinationLabel": "Arah Tanah Abang",
-  "description": "Kereta tertahan di luar stasiun Kebayoran.",
-  "visibility": "GLOBAL",
-  "status": "ACTIVE",
-  "upvoteCount": 0,
-  "expiresAt": "2026-11-07T13:36:00.000Z",
-  "createdAt": "2026-11-06T13:36:00.000Z",
-  "distanceMeters": 120,
   "station": {
-    "id": "station-uuid-123",
-    "name": "Stasiun Kebayoran"
-  }
-}
-```
-
-#### Error Responses
-- **`400 Bad Request`**: Submitter is outside the 500m station radius or missing latitude/longitude pair.
-- **`404 Not Found`**: Station or transit node not found.
-
----
-
-### b. Fetch Global & Active Feed
-Use this endpoint for loading the main **Live Disruption Home Feed** and active travel planning alerts.
-
-- **Endpoint**: `GET /report/all`
-- **Auth Required**: No
-- **Query Parameters**:
-  - `stationId` *(optional)*: Filter crowd status for a target station.
-  - `lineId` *(optional)*: Filter line delays.
-  - `destinationStationId` *(optional)*: Filter line delays bound for a specific station.
-
-#### Response Structure
-```json
-{
-  "globalDisruptions": [
-    /* Array of DISRUPTION, EVENT, or GLOBAL visibility reports */
-  ],
-  "lineDelays": [
-    /* Array of active DELAY reports */
-  ],
-  "destinationIndexedDelays": {
-    "station-uuid-456": [ /* Delays grouped by target destination */ ],
-    "unspecified": []
+    "id": "cmw4tswkz0005vpj4cngldh1x",
+    "name": "Stasiun Gondangdia",
+    "isTransitHub": false,
+    "supportedTypes": ["KRL"],
+    "lineNames": ["Bogor Line"],
+    "latitude": -6.186,
+    "longitude": 106.8326,
+    "validDestinations": ["cmw4tswml000nvpj4v0r3196m"],
+    "createdAt": "2026-11-06T10:22:47.027Z",
+    "updatedAt": "2026-11-12T03:58:50.130Z"
   },
-  "crowdStatus": [
-    /* Active CROWD reports matching query filters */
-  ],
-  "reports": [
-    /* Complete list of active non-expired reports */
-  ]
-}
-```
-
----
-
-### c. Fetch Station Details & Facility Reports
-Use this endpoint when rendering a **Station Details Page / Tab**.
-
-- **Endpoint**: `GET /report/stations/:id/reports`
-- **Auth Required**: No
-- **Path Parameter**: `id` - Station UUID
-
-#### Response Structure
-```json
-{
-  "station": {
-    "id": "station-uuid-123",
-    "name": "Stasiun Manggarai"
-  },
-  "facilityReports": [
-    {
-      "id": "rep-1",
-      "category": "FACILITY",
-      "subCategory": "ESCALATOR",
-      "title": "Eskalator Peron 3-4 Matot",
-      "createdAt": "2026-11-05T10:00:00.000Z"
-    }
-  ],
-  "crowdStats": {
-    "stationId": "station-uuid-123",
-    "stationName": "Stasiun Manggarai",
-    "totalReports": 12,
-    "recentReportsCount": 8,
-    "currentCrowdLevel": "CROWD_OVERFLOW",
-    "isCrowdOverflow": true,
+  "crowd": {
+    "currentCrowdLevel": "NORMAL",
+    "isCrowdOverflow": false,
     "breakdown": {
       "low": 0,
-      "normal": 1,
-      "high": 3,
-      "crowdOverflow": 4
+      "medium": 4,
+      "high": 1,
+      "very_high": 0
     },
-    "recentCrowdReports": [ /* Reports from the past 30 mins */ ]
+    "totalVotes": 5,
+    "updatedAt": "2026-11-12T15:20:00.000Z"
   },
-  "reports": [ /* All non-expired reports for this station */ ]
+  "delays": {
+    "Bogor Line:cmw4tswml000nvpj4v0r3196m": {
+      "lineName": "Bogor Line",
+      "lineId": "Bogor Line",
+      "destinationStationId": "cmw4tswml000nvpj4v0r3196m",
+      "destinationName": "Stasiun Bogor",
+      "minorCount": 0,
+      "mediumCount": 3,
+      "majorCount": 0,
+      "resolvedCount": 0,
+      "topNotes": ["Antrean sinyal masuk stasiun", "Tertahan 10 menit"],
+      "expiresAt": "2026-11-12T16:00:00.000Z"
+    }
+  },
+  "facilities": {
+    "ESCALATOR": {
+      "subCategory": "ESCALATOR",
+      "reportCount": 3,
+      "resolvedCount": 0,
+      "status": "BROKEN",
+      "topNote": "Eskalator peron utara mati",
+      "topNotes": ["Eskalator peron utara mati"],
+      "lastReportedAt": "2026-11-12T15:10:00.000Z"
+    }
+  },
+  "disruptions": {}
 }
 ```
 
 ---
 
-### d. Toggle Report Upvote
-Allows users to upvote or remove an upvote directly from any feed tab.
+### C. Symmetric Issue Resolution ("Sudah Normal")
+- **Method & Route**: `POST /stations/:id/resolve`
+- **Auth**: Required (`JwtAuthGuard`)
+- **Path Parameter**: `id` - Station ID
 
-- **Endpoint**: `POST /report/:id/upvote`
-- **Auth Required**: Yes (`JwtAuthGuard`)
-- **Path Parameter**: `id` - Report UUID
-
-#### Dynamics & Rules:
-1. **Toggle Behavior**: Tapping upvote again removes your upvote (`upvoted: false`).
-2. **TTL Extension**: If category is `DELAY`, every upvote extends `expiresAt` by **+15 minutes**.
-3. **Verification Upgrade**: Reaching **10 upvotes** automatically changes status to `VERIFIED`.
-
-#### Response Example
+#### Request Body (`ResolveIssueDto`)
 ```json
-// First tap:
 {
-  "upvoted": true,
-  "message": "Report upvoted successfully"
+  "category": "FACILITY",
+  "targetKey": "ESCALATOR"
 }
+```
+*Note on `targetKey`*:
+- For `FACILITY` / `DISRUPTION`: Send the enum subCategory (e.g. `"ESCALATOR"`, `"FLOOD_WEATHER"`).
+- For `DELAY`: Send the compound key `"{lineName}:{destinationStationId}"` (e.g. `"Bogor Line:cmw4tswml000nvpj4v0r3196m"`).
 
-// Second tap (toggle off):
-{
-  "upvoted": false,
-  "message": "Upvote removed"
-}
+#### Success Responses
+1. **Vote Counted towards Quorum**:
+   ```json
+   {
+     "status": "SUCCESS",
+     "action": "VOTED_NORMAL",
+     "cleared": false,
+     "targetKey": "ESCALATOR"
+   }
+   ```
+2. **Issue Resolved & Cleared Immediately**:
+   ```json
+   {
+     "status": "SUCCESS",
+     "action": "CLEARED",
+     "cleared": true,
+     "targetKey": "ESCALATOR"
+   }
+   ```
+3. **Already Resolved Within Active Window**:
+   ```json
+   {
+     "status": "ALREADY_RESOLVED",
+     "message": "You have already submitted a resolution for this issue."
+   }
+   ```
+
+#### Error Responses
+- **`400 Bad Request`**: Sent if `category === 'CROWD'` or invalid subcategory enum.
+- **`404 Not Found`**: Sent if the station or target issue is not currently active in `StationLiveStatus`.
+
+---
+
+### D. Global Disruption Feed (Active Broadcasts)
+- **Method & Route**: `GET /report/feed/global`
+- **Auth**: None (Public)
+- **Logic**: Returns flattened alert cards for issues with `status === "ACTIVE"` and `expiresAt > now`. Does not dump raw report tickets.
+
+#### Success Response Example
+```json
+[
+  {
+    "id": "cmw4tswkz0005vpj4cngldh1x-FLOOD_WEATHER",
+    "stationId": "cmw4tswkz0005vpj4cngldh1x",
+    "stationName": "Stasiun Gondangdia",
+    "category": "DISRUPTION",
+    "subCategory": "FLOOD_WEATHER",
+    "headline": "Banjir / Cuaca Ekstrem di Stasiun Gondangdia",
+    "isSkippedOrClosed": true,
+    "reportCount": 5,
+    "topNote": "Genangan air di area peron 1",
+    "topNotes": ["Genangan air di area peron 1", "Kereta berjalan lambat"],
+    "affectedLineIds": ["Bogor Line"],
+    "status": "ACTIVE",
+    "startedAt": "2026-11-12T14:30:00.000Z",
+    "expiresAt": "2026-11-12T16:30:00.000Z",
+    "updatedAt": "2026-11-12T15:00:00.000Z"
+  }
+]
 ```
 
 ---
 
-### e. Query / Search Reports List
-General utility endpoint to query reports with pagination.
-
-- **Endpoint**: `GET /report`
-- **Auth Required**: No
-- **Query Parameters**:
-  - `stationId` *(optional)*
-  - `category` *(optional)*: `CROWD` | `DELAY` | `FACILITY` | `DISRUPTION` | `EVENT`
-  - `status` *(optional)*: `ACTIVE` | `VERIFIED` | `RESOLVED` | `EXPIRED`
-  - `limit` *(optional)*: Default `20`
-  - `offset` *(optional)*: Default `0`
-
----
-
-## 5. Frontend UI/UX Integration Steps
+## 5. Flutter Integration Flow
 
 ```
-[User Opens App / Screen]
-          │
-          ├──> 1. Request GPS Coordinates (Haversine Check)
-          │
-          ├──> 2. Render Main Feed ─────────> Call GET /report/all
-          │                                  ├── Display globalDisruptions on top banner
-          │                                  └── Display lineDelays in transit feed
-          │
-          ├──> 3. User Opens Station Page ──> Call GET /report/stations/:id/reports
-          │                                  ├── Show facility status ("Masih Rusak?")
-          │                                  └── Show live Crowd Gauge (LOW/NORMAL/HIGH/OVERFLOW)
-          │
-          └──> 4. User Submits Report ─────> Call POST /report
-                                             ├── Verify proximity (< 500m)
-                                             └── Award +10 Commuter Points
+[ Commuter at Station / Checking Line ]
+           │
+           ├── 1. Get Live Station View:
+           │      └── Call GET /stations/:id/status
+           │          ├── Display Crowd Density Gauge (LOW/NORMAL/HIGH/VERY_HIGH)
+           │          ├── Display Directional Delays by Terminus (Bogor Line -> Stasiun Bogor)
+           │          └── Display Broken Facilities with topNotes
+           │
+           ├── 2. User Submits Report:
+           │      ├── Ensure device GPS is within 500m
+           │      └── Call POST /report with coordinates & category payload
+           │
+           ├── 3. User Confirms Issue Normal ("Sudah Normal"):
+           │      └── Call POST /stations/:id/resolve
+           │          └── UI clears issue card when cleared: true
+           │
+           └── 4. Main App Bar / Emergency Banner:
+                  └── Call GET /report/feed/global
+                      └── Displays active alerts (headline + isSkippedOrClosed badge)
 ```

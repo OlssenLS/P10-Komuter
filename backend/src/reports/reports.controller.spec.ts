@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsController } from './reports.controller.js';
 import { ReportsService } from './reports.service.js';
-import { ReportCategory, DelayImpact, ReportStatus } from '@prisma/client';
+import { ReportCategory, ReportSubCategory, ReportStatus } from '@prisma/client';
 
 describe('ReportsController', () => {
   let controller: ReportsController;
@@ -11,22 +11,23 @@ describe('ReportsController', () => {
     id: 'report-123',
     stationId: 'station-manggarai',
     userId: 'user-456',
-    title: 'Severe train delay',
     category: ReportCategory.DELAY,
-    status: ReportStatus.NEW,
-    impactLevel: DelayImpact.ENTIRE_LINE,
-    description: 'Track maintenance issue',
-    upvoteCount: 0,
+    subCategory: ReportSubCategory.MAJOR,
+    note: 'Track maintenance issue',
+    status: ReportStatus.ACTIVE,
+    isSkippedOrClosed: false,
+    isResolution: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
   const mockReportsService = {
     createReport: vi.fn(),
+    getGlobalFeed: vi.fn(),
+    getAllReports: vi.fn(),
+    getStationReports: vi.fn(),
     findAll: vi.fn(),
     findById: vi.fn(),
-    findByStationId: vi.fn(),
-    upvote: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -50,19 +51,35 @@ describe('ReportsController', () => {
     it('should delegate report creation with authenticated userId from req', async () => {
       const mockReq = { user: { id: 'user-456' } };
       const dto = {
-        title: 'Severe train delay',
+        stationId: 'station-manggarai',
         category: ReportCategory.DELAY,
-        impactLevel: DelayImpact.ENTIRE_LINE,
-        latitude: -6.2099,
-        longitude: 106.8497,
+        subCategory: ReportSubCategory.MAJOR,
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
+        note: 'Track maintenance issue',
       };
 
-      mockReportsService.createReport.mockResolvedValue(mockReport);
+      mockReportsService.createReport.mockResolvedValue({
+        status: 'SUCCESS',
+        report: mockReport,
+      });
 
       const result = await controller.createReport(mockReq, dto);
 
       expect(service.createReport).toHaveBeenCalledWith('user-456', dto);
-      expect(result).toEqual(mockReport);
+      expect(result).toEqual({
+        status: 'SUCCESS',
+        report: mockReport,
+      });
+    });
+  });
+
+  describe('getGlobalFeed', () => {
+    it('should delegate to reportsService.getGlobalFeed', async () => {
+      mockReportsService.getGlobalFeed.mockResolvedValue([]);
+      const result = await controller.getGlobalFeed();
+      expect(service.getGlobalFeed).toHaveBeenCalled();
+      expect(result).toEqual([]);
     });
   });
 
@@ -90,21 +107,6 @@ describe('ReportsController', () => {
 
       expect(service.findById).toHaveBeenCalledWith('report-123');
       expect(result).toEqual(mockReport);
-    });
-  });
-
-  describe('upvote', () => {
-    it('should delegate upvoting with userId from request', async () => {
-      const mockReq = { user: { id: 'user-456' } };
-      mockReportsService.upvote.mockResolvedValue({
-        upvoted: true,
-        message: 'Report upvoted successfully',
-      });
-
-      const result = await controller.upvote(mockReq, 'report-123');
-
-      expect(service.upvote).toHaveBeenCalledWith('report-123', 'user-456');
-      expect(result).toEqual({ upvoted: true, message: 'Report upvoted successfully' });
     });
   });
 });
