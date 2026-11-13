@@ -2,6 +2,7 @@ import { StationSeedData } from './types.js';
 import { krlStations } from './krl/index.js';
 import { mrtStations } from './mrt/index.js';
 import { lrtJabodebekStations } from './lrt_jabodebek/index.js';
+import { lrtJakartaStations } from './lrt_jakarta/index.js';
 import { TransportType } from '@prisma/client';
 
 export * from './types.js';
@@ -18,6 +19,7 @@ export function getAllStations(): StationSeedData[] {
     ...krlStations,
     ...mrtStations,
     ...lrtJabodebekStations,
+    ...lrtJakartaStations
   ];
 
   for (const station of allStationLists) {

@@ -52,6 +52,11 @@ export const LINE_TERMINUS_NAMES: Record<string, string[]> = {
     'Stasiun LRT Dukuh Atas Bank Syariah Indonesia',
     'Stasiun LRT Jatimulya',
   ],
+  'Southern Line': [
+    'Stasiun LRT Kelapa Gading',
+    'Stasiun LRT Velodrome',
+    'Stasiun LRT Manggarai',
+  ],
   'Soekarno-Hatta Line': [
     'Stasiun Manggarai',
     'Stasiun BNI City',
