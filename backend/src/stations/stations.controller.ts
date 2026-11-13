@@ -67,10 +67,14 @@ export class StationsController {
     return this.stationsService.resolveStationIssue(id, userId, dto);
   }
 
+  /**
+   * GET /stations/:id
+   * Canonical Endpoint: Returns full station profile + clean O(1) live status
+   */
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string) {
-    return this.stationsService.findOne(id);
+    return this.stationsService.getStationStatus(id);
   }
 
   @Get(':id/reports')

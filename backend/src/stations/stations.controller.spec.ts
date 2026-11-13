@@ -116,12 +116,18 @@ describe('StationsController', () => {
   });
 
   describe('findOne', () => {
-    it('should delegate to stationsService.findOne', async () => {
-      const station = { id: 's-1', name: 'Manggarai' };
-      mockStationsService.findOne.mockResolvedValue(station);
+    it('should delegate to stationsService.getStationStatus (Option 1 consolidation)', async () => {
+      const mockStatus = {
+        station: { id: 's-1', name: 'Manggarai' },
+        crowd: {},
+        delays: {},
+        facilities: {},
+        disruptions: {},
+      };
+      mockStationsService.getStationStatus.mockResolvedValue(mockStatus);
       const result = await controller.findOne('s-1');
-      expect(result).toEqual(station);
-      expect(mockStationsService.findOne).toHaveBeenCalledWith('s-1');
+      expect(result).toBe(mockStatus);
+      expect(mockStationsService.getStationStatus).toHaveBeenCalledWith('s-1');
     });
   });
 

@@ -178,9 +178,11 @@ export enum ReportStatus {
 ---
 
 ### B. Fetch Station Live Profile ($O(1)$ Flutter Tab View)
-- **Method & Route**: `GET /stations/:id/status`
+- **Canonical Endpoint**: `GET /stations/:id`
+- **Alias Endpoint**: `GET /stations/:id/status` (or `GET /report/stations/:id/status`)
 - **Auth**: None (Public)
 - **Path Parameter**: `id` - Station ID
+- **Design Note**: Consolidated into `GET /stations/:id` so Flutter gets the complete station metadata and computed live status (`crowd`, `delays`, `facilities`, `disruptions`) in a single network round-trip.
 
 #### Success Response Example
 ```json
@@ -325,7 +327,7 @@ export enum ReportStatus {
 [ Commuter at Station / Checking Line ]
            │
            ├── 1. Get Live Station View:
-           │      └── Call GET /stations/:id/status
+           │      └── Call GET /stations/:id (or GET /stations/:id/status)
            │          ├── Display Crowd Density Gauge (LOW/NORMAL/HIGH/VERY_HIGH)
            │          ├── Display Directional Delays by Terminus (Bogor Line -> Stasiun Bogor)
            │          └── Display Broken Facilities with topNotes
