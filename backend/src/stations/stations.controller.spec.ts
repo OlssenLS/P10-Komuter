@@ -68,23 +68,6 @@ describe('StationsController', () => {
     });
   });
 
-  describe('getStatus', () => {
-    it('should delegate to stationsService.getStationStatus', async () => {
-      const mockStatus = {
-        station: { id: 's-1', name: 'Manggarai' },
-        crowd: {},
-        delays: {},
-        facilities: {},
-        disruptions: {},
-      };
-      mockStationsService.getStationStatus.mockResolvedValue(mockStatus);
-
-      const result = await controller.getStatus('s-1');
-      expect(result).toBe(mockStatus);
-      expect(mockStationsService.getStationStatus).toHaveBeenCalledWith('s-1');
-    });
-  });
-
   describe('resolveIssue', () => {
     it('should delegate to stationsService.resolveStationIssue with authenticated user', async () => {
       const mockReq = { user: { id: 'user-1' } };

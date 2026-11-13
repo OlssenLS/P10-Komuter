@@ -20,7 +20,7 @@ export const rangkasbitungLineStations: StationSeedData[] = [
   },
   {
     name: 'Stasiun Kebayoran',
-    isTransitHub: false,
+    isTransitHub: true,
     supportedTypes: [TransportType.KRL, TransportType.TRANSIT],
     lineNames: ['Rangkasbitung Line'],
     latitude: -6.2372,
@@ -157,7 +157,7 @@ export const rangkasbitungLineStations: StationSeedData[] = [
   {
     name: 'Stasiun Rangkasbitung',
     isTransitHub: true,
-    supportedTypes: [TransportType.KRL],
+    supportedTypes: [TransportType.KRL, TransportType.TRANSIT],
     lineNames: ['Rangkasbitung Line'],
     latitude: -6.3527,
     longitude: 106.2515,

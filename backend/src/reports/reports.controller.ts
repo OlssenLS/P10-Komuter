@@ -23,12 +23,12 @@ interface AuthenticatedRequest {
   };
 }
 
-@Controller(['report', 'reports'])
+@Controller('report')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   /**
-   * POST /report or POST /reports
+   * POST /report
    * Atomic Event Sourcing + Materialized State Write Engine
    */
   @UseGuards(JwtAuthGuard)
@@ -43,7 +43,7 @@ export class ReportsController {
   }
 
   /**
-   * GET /report/feed/global or GET /reports/feed/global
+   * GET /report/feed/global
    * Returns active, non-expired disruption alert cards
    */
   @Get('feed/global')
@@ -53,34 +53,7 @@ export class ReportsController {
   }
 
   /**
-   * GET /report/all or GET /reports/all
-   */
-  @Get('all')
-  @HttpCode(HttpStatus.OK)
-  async getAllReports(@Query() query: Record<string, string>) {
-    return this.reportsService.getAllReports(query);
-  }
-
-  /**
-   * GET /report/stations/:id/status or GET /reports/stations/:id/status
-   */
-  @Get('stations/:id/status')
-  @HttpCode(HttpStatus.OK)
-  async getStationStatus(@Param('id') id: string) {
-    return this.reportsService.getStationReports(id);
-  }
-
-  /**
-   * GET /report/stations/:id/reports or GET /reports/stations/:id/reports
-   */
-  @Get('stations/:id/reports')
-  @HttpCode(HttpStatus.OK)
-  async getStationReports(@Param('id') id: string) {
-    return this.reportsService.getStationReports(id);
-  }
-
-  /**
-   * GET /report or GET /reports
+   * GET /report
    * Retrieves disruption reports audit log with optional filtering.
    */
   @Get()
@@ -90,7 +63,7 @@ export class ReportsController {
   }
 
   /**
-   * GET /report/:id or GET /reports/:id
+   * GET /report/:id
    * Retrieves a single disruption report by ID.
    */
   @Get(':id')

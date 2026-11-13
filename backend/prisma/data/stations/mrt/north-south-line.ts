@@ -43,6 +43,14 @@ export const NorthSouthLineStations: StationSeedData[] = [
     longitude: 106.8074,
   },
   {
+    name: 'Stasiun MRT Senayan Mastercard',
+    isTransitHub: true,
+    supportedTypes: [TransportType.MRT, TransportType.TRANSIT],
+    lineNames: ['North South Line'],
+    latitude: -6.2267,
+    longitude: 106.8025,
+  },
+  {
     name: 'Stasiun MRT ASEAN Headquarters',
     isTransitHub: true,
     supportedTypes: [TransportType.MRT, TransportType.TRANSIT],

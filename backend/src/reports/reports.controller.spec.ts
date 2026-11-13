@@ -24,8 +24,6 @@ describe('ReportsController', () => {
   const mockReportsService = {
     createReport: vi.fn(),
     getGlobalFeed: vi.fn(),
-    getAllReports: vi.fn(),
-    getStationReports: vi.fn(),
     findAll: vi.fn(),
     findById: vi.fn(),
   };

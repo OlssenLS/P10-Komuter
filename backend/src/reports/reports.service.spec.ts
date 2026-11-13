@@ -127,6 +127,69 @@ describe('ReportsService', () => {
       ).rejects.toThrow(/destinationStationId is required/);
     });
 
+    it('should reject DELAY report when destinationStationId is not in validDestinations', async () => {
+      mockStationsService.findOne.mockResolvedValueOnce({
+        ...mockStation,
+        validDestinations: [
+          {
+            lineName: 'Bogor Line',
+            destinationName: 'Stasiun Bogor',
+            destinationStationId: 'station-bogor',
+          },
+        ],
+      });
+
+      mockPrismaService.station.findUnique.mockResolvedValueOnce({
+        id: 'station-bekasi',
+        name: 'Stasiun Bekasi',
+      });
+
+      await expect(
+        service.createReport('user-456', {
+          stationId: 'station-manggarai',
+          category: ReportCategory.DELAY,
+          subCategory: ReportSubCategory.MAJOR,
+          lineName: 'Bogor Line',
+          destinationStationId: 'station-bekasi',
+          userLatitude: -6.2099,
+          userLongitude: 106.8497,
+        }),
+      ).rejects.toThrow(/is not a valid destination\/terminus/);
+    });
+
+    it('should accept DELAY report when destination matches validDestinations structure', async () => {
+      mockStationsService.findOne.mockResolvedValueOnce({
+        ...mockStation,
+        validDestinations: [
+          {
+            lineName: 'Bogor Line',
+            destinationName: 'Stasiun Bogor',
+            destinationStationId: 'station-bogor',
+          },
+        ],
+      });
+
+      mockPrismaService.station.findUnique.mockResolvedValueOnce({
+        id: 'station-bogor',
+        name: 'Stasiun Bogor',
+      });
+
+      mockTx.disruptionReport.findFirst.mockResolvedValueOnce(null);
+
+      const result = await service.createReport('user-456', {
+        stationId: 'station-manggarai',
+        category: ReportCategory.DELAY,
+        subCategory: ReportSubCategory.MAJOR,
+        lineName: 'Bogor Line',
+        destinationStationId: 'station-bogor',
+        userLatitude: -6.2099,
+        userLongitude: 106.8497,
+        note: 'Antrean kereta',
+      });
+
+      expect(result.status).toBe('SUCCESS');
+    });
+
     it('should reject invalid subCategory for category', async () => {
       await expect(
         service.createReport('user-456', {

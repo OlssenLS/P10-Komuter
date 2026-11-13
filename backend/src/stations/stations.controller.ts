@@ -40,13 +40,12 @@ export class StationsController {
   }
 
   /**
-   * GET /stations/:id/status
-   * Clean O(1) Read Endpoint:
-   * Returns { station, crowd, delays, facilities, disruptions }
+   * GET /stations/:id
+   * Canonical Endpoint: Returns full station profile + clean O(1) live status
    */
-  @Get(':id/status')
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getStatus(@Param('id') id: string) {
+  async findOne(@Param('id') id: string) {
     return this.stationsService.getStationStatus(id);
   }
 
@@ -65,16 +64,6 @@ export class StationsController {
   ) {
     const userId = req.user['id'];
     return this.stationsService.resolveStationIssue(id, userId, dto);
-  }
-
-  /**
-   * GET /stations/:id
-   * Canonical Endpoint: Returns full station profile + clean O(1) live status
-   */
-  @Get(':id')
-  @HttpCode(HttpStatus.OK)
-  async findOne(@Param('id') id: string) {
-    return this.stationsService.getStationStatus(id);
   }
 
   @Get(':id/reports')

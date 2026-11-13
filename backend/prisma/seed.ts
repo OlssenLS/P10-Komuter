@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { getAllStations } from './data/stations/index.js';
+import { backfillDestinations } from './backfill-destinations.js';
 
 const prisma = new PrismaClient();
 
@@ -40,6 +41,9 @@ async function main() {
   }
 
   console.log(`Seeding completed. Total stations processed: ${stations.length}`);
+
+  console.log('\nBackfilling validDestinations for all stations...');
+  await backfillDestinations(prisma);
 }
 
 main()

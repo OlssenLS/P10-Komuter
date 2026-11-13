@@ -166,14 +166,41 @@ export class ReportsService {
         : [];
 
       if (validDestinations.length > 0) {
-        const isValidDest = validDestinations.some(
-          (d) =>
+        const isValidDest = validDestinations.some((d) => {
+          const matchesStation =
             d === validatedDestStation.id ||
             d?.id === validatedDestStation.id ||
+            d?.destinationStationId === validatedDestStation.id ||
             (typeof d === 'string' &&
               d.toLowerCase() === validatedDestStation.name.toLowerCase()) ||
-            d?.name?.toLowerCase() === validatedDestStation.name.toLowerCase(),
-        );
+            d?.name?.toLowerCase() === validatedDestStation.name.toLowerCase() ||
+            d?.destinationName?.toLowerCase() ===
+              validatedDestStation.name.toLowerCase();
+
+          if (!matchesStation) {
+            return false;
+          }
+
+          // If entry specifies lineName and user supplied a line, ensure the line matches as well
+          if (d?.lineName && lineInput) {
+            const cleanInput = lineInput
+              .toLowerCase()
+              .replace(/^(krl|mrt|lrt|tj)-/i, '')
+              .replace(/\s+/g, '-');
+            const cleanDestLine = d.lineName
+              .toLowerCase()
+              .replace(/^(krl|mrt|lrt|tj)-/i, '')
+              .replace(/\s+/g, '-');
+
+            return (
+              cleanInput === cleanDestLine ||
+              cleanInput.includes(cleanDestLine) ||
+              cleanDestLine.includes(cleanInput)
+            );
+          }
+
+          return true;
+        });
 
         if (!isValidDest) {
           throw new BadRequestException(
@@ -529,29 +556,6 @@ export class ReportsService {
     cards.sort((a, b) => b.reportCount - a.reportCount);
 
     return cards;
-  }
-
-  /**
-   * GET /report/all
-   */
-  async getAllReports(query?: { stationId?: string }) {
-    const globalFeed = await this.getGlobalFeed();
-    let stationStatus = null;
-    if (query?.stationId) {
-      stationStatus = await this.stationsService.getStationStatus(query.stationId);
-    }
-
-    return {
-      globalFeed,
-      stationStatus,
-    };
-  }
-
-  /**
-   * GET /report/stations/:id/reports
-   */
-  async getStationReports(stationId: string) {
-    return this.stationsService.getStationStatus(stationId);
   }
 
   /**

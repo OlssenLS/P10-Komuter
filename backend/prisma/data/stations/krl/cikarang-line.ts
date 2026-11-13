@@ -136,7 +136,7 @@ export const cikarangLineStations: StationSeedData[] = [
     supportedTypes: [TransportType.KRL, TransportType.TRANSIT],
     lineNames: ['Cikarang Line', 'Rangkasbitung Line'],
     latitude: -6.1857,
-    longitude: 106.8108,
+    longitude: 106.8109,
   },
   {
     name: 'Stasiun Duri',
@@ -144,7 +144,7 @@ export const cikarangLineStations: StationSeedData[] = [
     supportedTypes: [TransportType.KRL, TransportType.TRANSIT],
     lineNames: ['Cikarang Line', 'Tangerang Line', 'Soekarno-Hatta Line'],
     latitude: -6.1553,
-    longitude: 106.80123,
+    longitude: 106.8012,
   },
   {
     name: 'Stasiun Angke',
@@ -181,7 +181,7 @@ export const cikarangLineStations: StationSeedData[] = [
   {
     name: 'Stasiun Pasar Senen',
     isTransitHub: true,
-    supportedTypes: [TransportType.KRL],
+    supportedTypes: [TransportType.KRL, TransportType.TRANSIT],
     lineNames: ['Cikarang Line'],
     latitude: -6.1747,
     longitude: 106.8445,

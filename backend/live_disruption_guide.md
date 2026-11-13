@@ -179,10 +179,9 @@ export enum ReportStatus {
 
 ### B. Fetch Station Live Profile ($O(1)$ Flutter Tab View)
 - **Canonical Endpoint**: `GET /stations/:id`
-- **Alias Endpoint**: `GET /stations/:id/status` (or `GET /report/stations/:id/status`)
 - **Auth**: None (Public)
 - **Path Parameter**: `id` - Station ID
-- **Design Note**: Consolidated into `GET /stations/:id` so Flutter gets the complete station metadata and computed live status (`crowd`, `delays`, `facilities`, `disruptions`) in a single network round-trip.
+- **Design Note**: Returns the complete station metadata (including `validDestinations`) and computed live status (`crowd`, `delays`, `facilities`, `disruptions`) in a single network round-trip.
 
 #### Success Response Example
 ```json
@@ -327,7 +326,7 @@ export enum ReportStatus {
 [ Commuter at Station / Checking Line ]
            │
            ├── 1. Get Live Station View:
-           │      └── Call GET /stations/:id (or GET /stations/:id/status)
+           │      └── Call GET /stations/:id
            │          ├── Display Crowd Density Gauge (LOW/NORMAL/HIGH/VERY_HIGH)
            │          ├── Display Directional Delays by Terminus (Bogor Line -> Stasiun Bogor)
            │          └── Display Broken Facilities with topNotes
@@ -344,3 +343,27 @@ export enum ReportStatus {
                   └── Call GET /report/feed/global
                       └── Displays active alerts (headline + isSkippedOrClosed badge)
 ```
+
+---
+
+## 6. Complete Backend API Route Reference
+
+| Module | Method | Endpoint | Auth | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **App** | `GET` | `/` | Public | System health check ("Hello World!") |
+| **Auth** | `POST` | `/auth/signup` | Public | Register commuter account |
+| **Auth** | `POST` | `/auth/login` | Public | Authenticate and issue JWT access & refresh tokens |
+| **Auth** | `POST` | `/auth/refresh` | Public | Refresh expired access token |
+| **Auth** | `POST` | `/auth/logout` | JWT | Invalidate refresh token session |
+| **Auth** | `GET` | `/auth/me` | JWT | Fetch authenticated commuter profile |
+| **Stations** | `POST` | `/stations/nearby` | Public | Query stations within radius ($500\text{m}$) of GPS |
+| **Stations** | `GET` | `/stations` | Public | List all 115 transit stations across Jabodetabek |
+| **Stations** | `GET` | `/stations/:id` | Public | **Canonical Station Profile**: Metadata (`validDestinations`) + live status (`crowd`, `delays`, `facilities`, `disruptions`) |
+| **Stations** | `POST` | `/stations/:id/resolve` | JWT | **Symmetric Resolution**: Vote issue resolved ("Sudah Normal") with quorum threshold |
+| **Stations** | `GET` | `/stations/:id/reports` | Public | Station audit log history of reports |
+| **Stations** | `POST` | `/stations` | JWT/Admin | Create new station (admin) |
+| **Report** | `POST` | `/report` | JWT | **Atomic Write Engine**: Submit report with 500m geofence, anti-spam TTL, quorum, & materialization |
+| **Report** | `GET` | `/report/feed/global` | Public | **Active Alerts Feed**: Global ticker banner of active emergencies, closures, and disruptions |
+| **Report** | `GET` | `/report` | Public | Query raw disruption report audit logs (optional filters: stationId, category, status) |
+| **Report** | `GET` | `/report/:id` | Public | Fetch a single disruption report audit log row by ID |
+
