@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StationsService } from '../stations/stations.service.js';
+import { EventMergingService, MergedFeedCard, FeedCardType } from './event-merging.service.js';
 import {
   CreateReportDto,
   CategorySubCategoryMap,
@@ -17,23 +18,8 @@ import {
   ReportStatus,
 } from '@prisma/client';
 
-export interface DisruptionAlertCard {
-  id: string;
-  stationId: string;
-  stationName: string;
-  category: ReportCategory;
-  subCategory: ReportSubCategory;
-  headline: string;
-  isSkippedOrClosed: boolean;
-  reportCount: number;
-  topNote: string | null;
-  topNotes: string[];
-  affectedLineIds: string[];
-  status: 'ACTIVE';
-  startedAt?: string;
-  expiresAt: string;
-  updatedAt: Date;
-}
+export type DisruptionAlertCard = MergedFeedCard;
+export type { MergedFeedCard, FeedCardType };
 
 const TTL_MAP: Record<ReportCategory, number> = {
   [ReportCategory.CROWD]: 15 * 60 * 1000,
@@ -96,6 +82,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stationsService: StationsService,
+    private readonly eventMergingService: EventMergingService,
   ) {}
 
   /**
@@ -500,62 +487,23 @@ export class ReportsService {
 
   /**
    * GET /report/feed/global
-   * Clean O(1) Read Endpoint:
-   * Queries StationLiveStatus where disruptionState has any entry with status === "ACTIVE" and expiresAt > now.
-   * Flattens into clean disruption alert cards.
+   * Topology-First Causal Event Merging Pipeline
+   * Synthesizes unified, non-duplicative Feed Cards:
+   * (SINGLE_STATION | CORRIDOR_EVENT | MULTI_LINE_EVENT | MASSIVE_DELAY_EVENT)
+   * using transit graph topology (E_line ∪ E_transfer) and causal specificity priority.
    */
-  async getGlobalFeed(): Promise<DisruptionAlertCard[]> {
+  async getGlobalFeed(): Promise<MergedFeedCard[]> {
     const now = new Date();
-    const liveStatuses = await this.prisma.stationLiveStatus.findMany({
-      include: {
-        station: true,
-      },
-    });
+    const [allStations, liveStatuses] = await Promise.all([
+      this.prisma.station.findMany(),
+      this.prisma.stationLiveStatus.findMany({
+        include: {
+          station: true,
+        },
+      }),
+    ]);
 
-    const cards: DisruptionAlertCard[] = [];
-
-    for (const live of liveStatuses) {
-      const disruptionState = (live.disruptionState as Record<string, any>) || {};
-      for (const [subCat, entry] of Object.entries(disruptionState)) {
-        if (
-          entry &&
-          entry.status === 'ACTIVE' &&
-          entry.expiresAt &&
-          new Date(entry.expiresAt) > now
-        ) {
-          const topNotes = Array.isArray(entry.topNotes)
-            ? entry.topNotes
-            : entry.topNote
-              ? [entry.topNote]
-              : [];
-
-          cards.push({
-            id: `${live.stationId}-${subCat}`,
-            stationId: live.stationId,
-            stationName: live.station.name,
-            category: ReportCategory.DISRUPTION,
-            subCategory: subCat as ReportSubCategory,
-            headline: formatSubCategoryHeadline(live.station.name, subCat),
-            isSkippedOrClosed: Boolean(entry.isSkippedOrClosed),
-            reportCount: Number(entry.reportCount) || 0,
-            topNote: entry.topNote || topNotes[0] || null,
-            topNotes,
-            affectedLineIds: Array.isArray(entry.affectedLineIds)
-              ? entry.affectedLineIds
-              : [],
-            status: 'ACTIVE',
-            startedAt: entry.startedAt,
-            expiresAt: entry.expiresAt,
-            updatedAt: live.updatedAt,
-          });
-        }
-      }
-    }
-
-    // Sort by reportCount desc
-    cards.sort((a, b) => b.reportCount - a.reportCount);
-
-    return cards;
+    return this.eventMergingService.synthesizeFeed(allStations, liveStatuses, now);
   }
 
   /**

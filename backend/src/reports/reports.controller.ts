@@ -23,7 +23,7 @@ interface AuthenticatedRequest {
   };
 }
 
-@Controller('report')
+@Controller(['report', 'reports'])
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
