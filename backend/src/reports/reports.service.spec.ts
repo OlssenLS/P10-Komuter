@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { ReportsService } from './reports.service.js';
+import { EventMergingService } from './event-merging.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StationsService } from '../stations/stations.service.js';
 import { ReportCategory, ReportSubCategory, ReportStatus, TransportType } from '@prisma/client';
@@ -43,6 +44,7 @@ describe('ReportsService', () => {
   const mockPrismaService = {
     station: {
       findUnique: vi.fn().mockResolvedValue(mockStation),
+      findMany: vi.fn().mockResolvedValue([mockStation]),
     },
     stationLiveStatus: {
       findMany: vi.fn(),
@@ -89,6 +91,7 @@ describe('ReportsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReportsService,
+        EventMergingService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: StationsService, useValue: mockStationsService },
       ],

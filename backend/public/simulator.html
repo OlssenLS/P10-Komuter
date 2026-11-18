@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Komutin Sandbox</title>
+  <style>
+    :root {
+      --bg-dark: #070B12;
+      --bg-panel: rgba(14, 20, 32, 0.95);
+      --bg-panel-subtle: rgba(22, 31, 49, 0.75);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --border-highlight: rgba(56, 189, 248, 0.4);
+      --text-main: #F1F5F9;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --accent-blue: #38BDF8;
+      --accent-green: #10B981;
+      --accent-yellow: #F59E0B;
+      --accent-orange: #F97316;
+      --accent-red: #EF4444;
+      --accent-purple: #8B5CF6;
+      
+      /* Official Transit Colors */
+      --line-bogor: #EC2329;
+      --line-cikarang: #26BAED;
+      --line-rangkas: #99CA3E;
+      --line-tangerang: #C25F28;
+      --line-priok: #EF509A;
+      --line-mrt: #CA2047;
+      --line-bekasi: #006838; 
+      --line-cibubur: #21409A;
+      --line-southern: #F26324;
+      --line-airport: #262262;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Command Header */
+    header {
+      height: 56px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #0284C7, #0369A1);
+      color: #FFF;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-pill {
+      background: var(--bg-panel-subtle);
+      border: 1px solid var(--border-color);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-pill b {
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+
+    /* User account switcher in header */
+    .user-switcher {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2px 4px 2px 10px;
+    }
+    .user-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .user-current-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-blue);
+      max-width: 120px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-pill-btn {
+      background: var(--bg-panel-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .user-pill-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #FFF;
+    }
+    .user-pill-btn.active {
+      background: #0284C7;
+      border-color: #38BDF8;
+      color: #FFF;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+    }
+
+    .btn-secondary {
+      background: var(--bg-panel-subtle);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--accent-blue);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.28);
+      border-color: #EF4444;
+      color: #FFF;
+    }
+
+    .btn-primary {
+      background: #0284C7;
+      color: #FFF;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+    .btn-primary:hover {
+      background: #0369A1;
+    }
+
+    .btn-resolve {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+    .btn-resolve:hover {
+      background: rgba(16, 185, 129, 0.3);
+      border-color: #10B981;
+      color: #FFF;
+    }
+
+    /* Main Container with 3 columns */
+    .main-workspace {
+      flex: 1;
+      position: relative;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Canvas Map Area */
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      cursor: grab;
+      user-select: none;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Floating Map Controls */
+    .map-controls {
+      position: absolute;
+      top: 18px;
+      left: 375px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .map-btn {
+      width: 34px;
+      height: 34px;
+      background: var(--bg-panel);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .map-btn:hover {
+      background: rgba(255,255,255,0.15);
+      border-color: var(--accent-blue);
+    }
+
+    .map-legend {
+      position: absolute;
+      bottom: 18px;
+      left: 375px;
+      z-index: 10;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 11px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      max-width: 660px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    /* Left Sidebar: Station Inspector */
+    .sidebar-left {
+      position: relative;
+      width: 360px;
+      height: 100%;
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      border-right: 1px solid var(--border-color);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    /* Right Sidebar: Global Disruption Feed */
+    .sidebar-right {
+      position: relative;
+      width: 360px;
+      height: 100%;
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      border-left: 1px solid var(--border-color);
+      z-index: 10;
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg-panel);
+      z-index: 5;
+    }
+    .sidebar-header h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .sidebar-content {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Station Card */
+    .station-profile-card {
+      background: var(--bg-panel-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .station-name-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: #FFF;
+    }
+    .station-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .tag-transit {
+      background: rgba(245, 158, 11, 0.2);
+      color: #FBBF24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .tag-line {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38BDF8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    /* Section Headers */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    /* Live Status Blocks */
+    .live-status-block {
+      background: var(--bg-panel-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Bar Graph Containers */
+    .bar-graph-card {
+      background: rgba(11, 17, 30, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .bar-graph-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .bar-container {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      width: 100%;
+    }
+    .bar-segment {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+    .bar-low { background: #10B981; }
+    .bar-med { background: #38BDF8; }
+    .bar-high { background: #F59E0B; }
+    .bar-vhigh { background: #EF4444; }
+
+    .bar-delay-minor { background: #FBBF24; }
+    .bar-delay-medium { background: #F97316; }
+    .bar-delay-major { background: #EF4444; }
+
+    .bar-legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+    .bar-legend span b {
+      color: var(--text-main);
+    }
+
+    /* Facility rows */
+    .facility-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 11px;
+    }
+    .facility-row:last-child {
+      border-bottom: none;
+    }
+
+    .status-badge {
+      font-size: 9px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .status-operational {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-broken {
+      background: rgba(239, 68, 68, 0.2);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .status-pending {
+      background: rgba(245, 158, 11, 0.2);
+      color: #FBBF24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .status-active {
+      background: rgba(239, 68, 68, 0.25);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+    }
+
+    /* Simulation Form Tabs */
+    .form-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .tab-btn {
+      flex: 1;
+      text-align: center;
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid transparent;
+      font-size: 11px;
+      padding: 5px 6px;
+      border-radius: 4px;
+      justify-content: center;
+    }
+    .tab-btn:hover {
+      background: rgba(255,255,255,0.06);
+      color: #FFF;
+    }
+    .tab-btn.active {
+      background: var(--bg-panel-subtle);
+      border-color: var(--border-color);
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+
+    .sim-card {
+      background: rgba(30, 41, 59, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 3px;
+      display: block;
+    }
+
+    select, input[type="text"], input[type="password"], input[type="email"] {
+      width: 100%;
+      background: #0B111E;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+    }
+    select:focus, input:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .checkbox-row input {
+      cursor: pointer;
+    }
+
+    .sim-btn-action {
+      width: 100%;
+      justify-content: center;
+      padding: 8px;
+      margin-top: 4px;
+    }
+
+    /* Global Feed Cards */
+    .alert-card {
+      background: var(--bg-panel-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .alert-card:hover {
+      border-color: var(--border-highlight);
+      transform: translateY(-1px);
+    }
+    .alert-card.active-alert {
+      border-left: 4px solid #EF4444;
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.08) 0%, rgba(14, 20, 32, 0.7) 100%);
+    }
+    .alert-card.type-delay {
+      border-left: 4px solid #F59E0B;
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.08) 0%, rgba(14, 20, 32, 0.7) 100%);
+    }
+    .alert-card.type-multiline {
+      border-left: 4px solid #A855F7;
+      background: linear-gradient(90deg, rgba(168, 85, 247, 0.08) 0%, rgba(14, 20, 32, 0.7) 100%);
+    }
+    .alert-card.type-corridor {
+      border-left: 4px solid #EF4444;
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.08) 0%, rgba(14, 20, 32, 0.7) 100%);
+    }
+
+    .badge-type-single {
+      background: rgba(239, 68, 68, 0.15);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .badge-type-corridor {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38BDF8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .badge-type-multiline {
+      background: rgba(168, 85, 247, 0.15);
+      color: #C084FC;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+    }
+    .badge-type-delay {
+      background: rgba(245, 158, 11, 0.15);
+      color: #FBBF24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .alert-impact {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      margin-top: 2px;
+      font-weight: 500;
+      line-height: 1.3;
+    }
+    .impact-downstream {
+      background: rgba(56, 189, 248, 0.1);
+      color: #7DD3FC;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .impact-crowd {
+      background: rgba(245, 158, 11, 0.1);
+      color: #FCD34D;
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    .impact-icon {
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .alert-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-emergency {
+      background: rgba(239, 68, 68, 0.2);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .badge-closed {
+      background: #7F1D1D;
+      color: #FECACA;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+    }
+
+    .alert-station {
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFF;
+    }
+    .alert-headline {
+      font-size: 12px;
+      color: #E2E8F0;
+      line-height: 1.4;
+    }
+    .alert-notes {
+      font-size: 11px;
+      color: var(--text-dim);
+      background: rgba(0,0,0,0.25);
+      padding: 6px 8px;
+      border-radius: 4px;
+      border-left: 2px solid var(--border-color);
+      font-style: italic;
+    }
+    .alert-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Live status dot */
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+      animation: pulse 1.8s infinite;
+    }
+    .live-dot.emergency {
+      background: #EF4444;
+      box-shadow: 0 0 10px #EF4444;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.4; transform: scale(0.9); }
+    }
+
+    /* Auth Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-dialog {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      width: 380px;
+      max-width: 90vw;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.6);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header h3 {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .modal-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .auth-tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--accent-blue);
+      color: #FFF;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 100;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      pointer-events: none;
+    }
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Command Bar -->
+  <header>
+    <div class="brand">
+      <span class="brand-badge">KOMUTIN</span>
+      <span class="brand-title">Sandbox Operations Center</span>
+    </div>
+
+    <div class="header-center">
+      <div class="stat-pill">
+        <span>Stations:</span> <b id="stat-stations">0</b>
+      </div>
+      <div class="stat-pill">
+        <span>Active Alerts:</span> <b id="stat-alerts" style="color: #F87171;">0</b>
+      </div>
+      <div class="stat-pill">
+        <span class="live-dot" id="system-status-dot"></span>
+        <span id="system-status-text">NETWORK NORMAL</span>
+      </div>
+
+      <!-- User Account Switcher -->
+      <div class="user-switcher">
+        <span class="user-label">User:</span>
+        <span class="user-current-name" id="user-display-name">Loading...</span>
+        <button class="user-pill-btn active" id="btn-user-alpha" title="Switch to Operator Alpha">Alpha</button>
+        <button class="user-pill-btn" id="btn-user-beta" title="Switch to Operator Beta">Beta</button>
+        <button class="user-pill-btn" id="btn-user-gamma" title="Switch to Operator Gamma">Gamma</button>
+        <button class="user-pill-btn" id="btn-open-auth-modal" title="Sign In or Register Custom Account">Account</button>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn-danger" id="btn-reset-all">Reset All Test Data</button>
+      <button class="btn-secondary" id="btn-refresh-feed">Refresh</button>
+    </div>
+  </header>
+
+  <!-- Main Simulator Workspace -->
+  <div class="main-workspace">
+
+    <!-- Left Sidebar: Station Inspector -->
+    <aside class="sidebar-left" id="sidebar-inspector">
+      <div class="sidebar-header">
+        <h2>Station Inspector</h2>
+        <span id="inspector-station-id" style="font-size: 10px; color: var(--text-dim); font-family: monospace;"></span>
+      </div>
+
+      <div class="sidebar-content" id="inspector-body">
+        <div class="empty-state">
+          <div style="font-weight: 700; margin-bottom: 6px;">No Station Selected</div>
+          <div>Select any station node on the map to inspect live bar graphs (crowd, delays, facilities) and submit 1-by-1 commuter reports.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Canvas Interactive Transit Graph -->
+    <div id="canvas-container">
+      <canvas id="transit-canvas"></canvas>
+    </div>
+
+    <!-- Map Floating Controls -->
+    <div class="map-controls">
+      <button class="map-btn" id="btn-zoom-in" title="Zoom In">+</button>
+      <button class="map-btn" id="btn-zoom-out" title="Zoom Out">−</button>
+      <button class="map-btn" id="btn-zoom-reset" title="Reset View">⊙</button>
+    </div>
+
+    <!-- Map Legend -->
+    <div class="map-legend">
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-bogor);"></span> Bogor Line</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-cikarang);"></span> Cikarang Line</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-rangkas);"></span> Rangkasbitung</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-tangerang);"></span> Tangerang Line</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-priok);"></span> Tanjung Priok</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-mrt);"></span> MRT North-South</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-bekasi);"></span> LRT Bekasi</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-cibubur);"></span> LRT Cibubur</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-southern);"></span> LRT Southern</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--line-airport);"></span> Soekarno-Hatta</div>
+    </div>
+
+    <!-- Right Sidebar: Global Disruption Feed -->
+    <aside class="sidebar-right">
+      <div class="sidebar-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="live-dot" id="feed-live-dot"></span>
+          <h2>Global Emergency Feed</h2>
+        </div>
+        <span style="font-size: 11px; color: var(--accent-blue); font-weight: 700;" id="feed-count-badge">0 Live</span>
+      </div>
+
+      <div class="sidebar-content" id="feed-card-list">
+        <div class="empty-state">
+          <div style="font-weight: 700; margin-bottom: 6px;">All Stations Normal</div>
+          <div>Zero active emergency disruptions or closures. Click a station to simulate an incident.</div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Sign In / Log In Modal -->
+  <div class="modal-overlay" id="auth-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="auth-modal-title">Account Authentication</h3>
+        <button class="btn-secondary" id="btn-close-auth-modal" style="padding: 2px 8px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="auth-tabs">
+          <button class="tab-btn active" id="tab-auth-login">Log In</button>
+          <button class="tab-btn" id="tab-auth-signup">Sign Up</button>
+          <button class="tab-btn" id="tab-auth-profile">Active Profile</button>
+        </div>
+
+        <!-- Log In Form -->
+        <div id="form-login-pane">
+          <div style="margin-bottom: 10px;">
+            <label>Username or Email</label>
+            <input type="text" id="login-identifier" />
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label>Password</label>
+            <input type="password" id="login-password" />
+          </div>
+          <div id="login-error" style="color: #F87171; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+          <button class="btn-primary sim-btn-action" id="btn-submit-login">Log In</button>
+        </div>
+
+        <!-- Sign Up Form -->
+        <div id="form-signup-pane" style="display: none;">
+          <div style="margin-bottom: 8px;">
+            <label>Full Name</label>
+            <input type="text" id="signup-name" />
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label>Username</label>
+            <input type="text" id="signup-username" />
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label>Email</label>
+            <input type="email" id="signup-email" />
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label>Password (min 6 chars)</label>
+            <input type="password" id="signup-password" />
+          </div>
+          <div id="signup-error" style="color: #F87171; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+          <button class="btn-primary sim-btn-action" id="btn-submit-signup">Create Account</button>
+        </div>
+
+        <!-- Active Profile Info -->
+        <div id="form-profile-pane" style="display: none;">
+          <div style="font-size: 12px; line-height: 1.6; margin-bottom: 12px;">
+            <div><b>Name:</b> <span id="profile-name">-</span></div>
+            <div><b>Username:</b> <span id="profile-username">-</span></div>
+            <div><b>Email:</b> <span id="profile-email">-</span></div>
+            <div><b>Role:</b> <span id="profile-role">-</span></div>
+            <div><b>Points:</b> <span id="profile-points">0</span></div>
+          </div>
+          <button class="btn-danger sim-btn-action" id="btn-auth-logout">Log Out to Operator Alpha</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast">Notification</div>
+
+  <script>
+    // --- Application State ---
+    let stations = [];
+    let tracks = [];
+    let globalFeed = [];
+    let selectedStation = null;
+    let selectedReportTab = 'CROWD';
+
+    // Auth & Commuter tokens
+    let testTokens = [];
+    let activeToken = '';
+    let activeUser = { name: 'Operator Alpha', username: 'sim_alpha', email: 'simulator_alpha@komutin.com' };
+    let customUser = null;
+
+    // Spaced out world dimensions
+    function worldWidth() { return 3600; }
+    function worldHeight() { return 2400; }
+
+    const BBOX = {
+      minLon: 106.20,
+      maxLon: 107.20,
+      minLat: -6.65,
+      maxLat: -6.08,
+    };
+
+    // Canvas view transform state
+    const transform = {
+      scale: 0.85,
+      offsetX: 0,
+      offsetY: 0,
+      isDragging: false,
+      startX: 0,
+      startY: 0,
+    };
+
+    const canvas = document.getElementById('transit-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+
+    let hoveredStation = null;
+
+    // Dynamic Color Resolution: reads from CSS variables if customized, fallback to defaults
+    const CSS_LINE_VAR_MAP = {
+      'Bogor Line': '--line-bogor',
+      'Bogor Line (Nambo)': '--line-bogor',
+      'Cikarang Line': '--line-cikarang',
+      'Rangkasbitung Line': '--line-rangkas',
+      'Tangerang Line': '--line-tangerang',
+      'Tanjung Priok Line': '--line-priok',
+      'North South Line': '--line-mrt',
+      'North South Line (MRT)': '--line-mrt',
+      'Bekasi Line': '--line-bekasi',
+      'Bekasi Line (LRT)': '--line-bekasi',
+      'Cibubur Line': '--line-cibubur',
+      'Cibubur Line (LRT)': '--line-cibubur',
+      'Southern Line': '--line-southern',
+      'Soekarno-Hatta Line': '--line-airport',
+    };
+
+    const LINE_COLORS = {
+      'Bogor Line': '#EC2329',
+      'Bogor Line (Nambo)': '#EC2329',
+      'Cikarang Line': '#26BAED',
+      'Rangkasbitung Line': '#99CA3E',
+      'Tangerang Line': '#C25F28',
+      'Tanjung Priok Line': '#EF509A',
+      'North South Line': '#CA2047',
+      'North South Line (MRT)': '#CA2047',
+      'Bekasi Line': '#006838',
+      'Bekasi Line (LRT)': '#006838',
+      'Cibubur Line': '#21409A',
+      'Cibubur Line (LRT)': '#21409A',
+      'Southern Line': '#F26324',
+      'Soekarno-Hatta Line': '#262262',
+      'Whoosh': '#9333EA',
+    };
+
+    function getLineColor(lineName, fallbackColor) {
+      const varName = CSS_LINE_VAR_MAP[lineName];
+      if (varName) {
+        const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+        if (val) return val;
+      }
+      return LINE_COLORS[lineName] || fallbackColor || '#38BDF8';
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.innerText = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    // --- Coordinate Projections ---
+    function latLonToWorld(lat, lon) {
+      const x = ((lon - BBOX.minLon) / (BBOX.maxLon - BBOX.minLon)) * worldWidth();
+      const y = ((BBOX.maxLat - lat) / (BBOX.maxLat - BBOX.minLat)) * worldHeight();
+      return { x, y };
+    }
+
+    function worldToScreen(wx, wy) {
+      return {
+        x: wx * transform.scale + transform.offsetX,
+        y: wy * transform.scale + transform.offsetY,
+      };
+    }
+
+    function screenToWorld(sx, sy) {
+      return {
+        x: (sx - transform.offsetX) / transform.scale,
+        y: (sy - transform.offsetY) / transform.scale,
+      };
+    }
+
+    function resizeCanvas() {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- Canvas Drawing Engine ---
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+      drawTracks();
+      drawHighlightedEventCorridors();
+      drawStations();
+
+      if (hoveredStation && !transform.isDragging) {
+        drawTooltip(hoveredStation);
+      }
+    }
+
+    function calculateHaversine(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = deg => (deg * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const rLat1 = toRad(lat1);
+      const rLat2 = toRad(lat2);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c * 10) / 10;
+    }
+
+    function drawGrid() {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = 1;
+      const step = 90 * transform.scale;
+      const startX = transform.offsetX % step;
+      const startY = transform.offsetY % step;
+
+      ctx.beginPath();
+      for (let x = startX; x < canvas.width; x += step) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+      }
+      for (let y = startY; y < canvas.height; y += step) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawTracks() {
+      if (!tracks || tracks.length === 0) return;
+
+      const stationMap = new Map();
+      stations.forEach(s => stationMap.set(s.name, s));
+
+      tracks.forEach(track => {
+        ctx.save();
+        const color = getLineColor(track.line, track.color);
+        ctx.strokeStyle = color;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8 * transform.scale;
+        ctx.lineWidth = Math.max(3, 4 * transform.scale);
+        ctx.globalAlpha = 0.85;
+
+        ctx.beginPath();
+        let started = false;
+
+        track.stationNames.forEach(sName => {
+          const s = stationMap.get(sName);
+          if (s) {
+            const world = latLonToWorld(s.latitude, s.longitude);
+            const screen = worldToScreen(world.x, world.y);
+            if (!started) {
+              ctx.moveTo(screen.x, screen.y);
+              started = true;
+            } else {
+              ctx.lineTo(screen.x, screen.y);
+            }
+          }
+        });
+
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    /**
+     * Highlights exact clustered station nodes and connecting edges (E_line / E_transfer)
+     * in pulsing red/amber when CORRIDOR_EVENT, MULTI_LINE_EVENT, or MASSIVE_DELAY_EVENT is active.
+     * No giant circle overlays.
+     */
+    function drawHighlightedEventCorridors() {
+      if (!globalFeed || globalFeed.length === 0 || stations.length === 0) return;
+
+      const stationMap = new Map();
+      stations.forEach(s => stationMap.set(s.name, s));
+
+      const now = Date.now();
+      const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+
+      globalFeed.forEach(card => {
+        const isCorridor =
+          card.type === 'CORRIDOR_EVENT' ||
+          card.type === 'MULTI_LINE_EVENT' ||
+          card.type === 'MASSIVE_DELAY_EVENT';
+
+        if (!isCorridor) return;
+
+        const affIds = new Set(
+          card.affectedStationIds && card.affectedStationIds.length
+            ? card.affectedStationIds
+            : (card.stationId ? [card.stationId] : [])
+        );
+
+        if (affIds.size < 2) return;
+
+        const isDelay = card.type === 'MASSIVE_DELAY_EVENT';
+        const color = isDelay ? '#F59E0B' : '#EF4444';
+        const alpha = 0.7 + 0.3 * pulse;
+        const blur = (12 + 8 * pulse) * transform.scale;
+        const lineWidth = Math.max(5, (isDelay ? 6 : 7.5) * transform.scale);
+
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = blur;
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = lineWidth;
+
+        // 1. Highlight line edges (E_line) between contiguous clustered stations
+        tracks.forEach(track => {
+          for (let i = 0; i < track.stationNames.length - 1; i++) {
+            const s1 = stationMap.get(track.stationNames[i]);
+            const s2 = stationMap.get(track.stationNames[i + 1]);
+
+            if (s1 && s2 && affIds.has(s1.id) && affIds.has(s2.id)) {
+              const w1 = latLonToWorld(s1.latitude, s1.longitude);
+              const w2 = latLonToWorld(s2.latitude, s2.longitude);
+              const p1 = worldToScreen(w1.x, w1.y);
+              const p2 = worldToScreen(w2.x, w2.y);
+
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.stroke();
+            }
+          }
+        });
+
+        // 2. Highlight micro-interchanges (E_transfer <= 400m) for multi-line events
+        if (card.type === 'MULTI_LINE_EVENT') {
+          const affStations = stations.filter(s => affIds.has(s.id));
+          ctx.setLineDash([6 * transform.scale, 4 * transform.scale]);
+          ctx.lineWidth = Math.max(3, 4 * transform.scale);
+
+          for (let i = 0; i < affStations.length; i++) {
+            for (let j = i + 1; j < affStations.length; j++) {
+              const u = affStations[i];
+              const v = affStations[j];
+              const dist = calculateHaversine(u.latitude, u.longitude, v.latitude, v.longitude);
+              if (dist <= 400) {
+                const w1 = latLonToWorld(u.latitude, u.longitude);
+                const w2 = latLonToWorld(v.latitude, v.longitude);
+                const p1 = worldToScreen(w1.x, w1.y);
+                const p2 = worldToScreen(w2.x, w2.y);
+
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+
+        ctx.restore();
+      });
+    }
+
+    function drawStations() {
+      const disruptionStationIds = new Set();
+      const delayStationIds = new Set();
+
+      globalFeed.forEach(f => {
+        const ids = f.affectedStationIds && f.affectedStationIds.length
+          ? f.affectedStationIds
+          : (f.stationId ? [f.stationId] : []);
+
+        if (f.type === 'MASSIVE_DELAY_EVENT') {
+          ids.forEach(id => delayStationIds.add(id));
+        } else {
+          ids.forEach(id => disruptionStationIds.add(id));
+        }
+      });
+
+      stations.forEach((s, idx) => {
+        const world = latLonToWorld(s.latitude, s.longitude);
+        const screen = worldToScreen(world.x, world.y);
+
+        if (screen.x < -80 || screen.x > canvas.width + 80 || screen.y < -80 || screen.y > canvas.height + 80) {
+          return;
+        }
+
+        const isDisrupted = disruptionStationIds.has(s.id);
+        const isDelay = !isDisrupted && delayStationIds.has(s.id);
+        const isSelected = selectedStation && selectedStation.id === s.id;
+        const isHovered = hoveredStation && hoveredStation.id === s.id;
+
+        const baseRadius = s.isTransitHub ? 6.5 : 4;
+        const radius = Math.max(3, baseRadius * Math.min(2.0, Math.max(0.7, transform.scale)));
+
+        // Pulsing Beacon on Disrupted Stations (Red) or Delay Corridor (Amber)
+        if (isDisrupted || isDelay) {
+          ctx.save();
+          const time = Date.now() / 320;
+          const pulseR = radius + 8 + Math.sin(time) * 4;
+          ctx.beginPath();
+          ctx.arc(screen.x, screen.y, pulseR, 0, Math.PI * 2);
+          ctx.fillStyle = isDisrupted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)';
+          ctx.strokeStyle = isDisrupted ? '#EF4444' : '#F59E0B';
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Selected station reticle
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = '#38BDF8';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(screen.x, screen.y, radius + 7, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Node Circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+
+        if (isDisrupted) {
+          ctx.fillStyle = '#EF4444';
+        } else if (isDelay) {
+          ctx.fillStyle = '#F59E0B';
+        } else if (s.isTransitHub) {
+          ctx.fillStyle = '#F59E0B';
+        } else {
+          ctx.fillStyle = '#FFF';
+        }
+
+        ctx.strokeStyle = '#0B111E';
+        ctx.lineWidth = Math.max(1.5, 2 * transform.scale);
+        ctx.fill();
+        ctx.stroke();
+
+        // Transit Hub Outer Ring
+        if (s.isTransitHub) {
+          ctx.beginPath();
+          ctx.arc(screen.x, screen.y, radius + 3, 0, Math.PI * 2);
+          ctx.strokeStyle = '#F59E0B';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Smart Station Label with Collision Avoidance & Alternating Split Sides
+        const shouldShowLabel = 
+          isSelected || 
+          isHovered || 
+          isDisrupted || 
+          isDelay ||
+          (s.isTransitHub && transform.scale > 0.65) || 
+          (transform.scale > 1.2);
+
+        if (shouldShowLabel) {
+          ctx.save();
+          const cleanName = s.name
+            .replace(/^Stasiun (MRT |LRT )?/, '')
+            .split(' Bank ')[0]
+            .split(' Summarecon')[0]
+            .split(' BCA')[0]
+            .split(' Visa')[0]
+            .split(' Indomaret')[0]
+            .split(' TUKU')[0]
+            .split(' Mastercard')[0]
+            .split(' Mandiri')[0]
+            .split(' Astra')[0]
+            .split(' BNI')[0];
+
+          const fontSize = Math.max(9, Math.min(12, 10 * transform.scale));
+          ctx.font = `${s.isTransitHub || isSelected ? '700' : '500'} ${fontSize}px -apple-system, sans-serif`;
+
+          // Alternate left and right sides to split adjacent fonts!
+          const placeLeft = idx % 2 === 1 && !isSelected;
+          const textX = placeLeft ? screen.x - radius - 6 : screen.x + radius + 6;
+          const textAlign = placeLeft ? 'right' : 'left';
+
+          ctx.textAlign = textAlign;
+          ctx.textBaseline = 'middle';
+
+          // Measure text and draw subtle background pill for crisp legibility over tracks
+          const textMetrics = ctx.measureText(cleanName);
+          const bgPaddingX = 4;
+          const bgPaddingY = 2;
+          const bgW = textMetrics.width + bgPaddingX * 2;
+          const bgH = fontSize + bgPaddingY * 2;
+          const bgX = placeLeft ? textX - textMetrics.width - bgPaddingX : textX - bgPaddingX;
+          const bgY = screen.y - bgH / 2;
+
+          ctx.fillStyle = 'rgba(7, 11, 18, 0.78)';
+          ctx.beginPath();
+          ctx.roundRect(bgX, bgY, bgW, bgH, 3);
+          ctx.fill();
+
+          ctx.fillStyle = isSelected 
+            ? '#38BDF8' 
+            : (isDisrupted 
+                ? '#F87171' 
+                : (s.isTransitHub ? '#FCD34D' : '#CBD5E1'));
+
+          ctx.fillText(cleanName, textX, screen.y);
+          ctx.restore();
+        }
+      });
+    }
+
+    function drawTooltip(s) {
+      const world = latLonToWorld(s.latitude, s.longitude);
+      const screen = worldToScreen(world.x, world.y);
+
+      const title = s.name;
+      const subtitle = s.lineNames.join(', ');
+
+      ctx.save();
+      ctx.font = 'bold 12px sans-serif';
+      const w1 = ctx.measureText(title).width;
+      ctx.font = '10px sans-serif';
+      const w2 = ctx.measureText(subtitle).width;
+      const boxW = Math.max(w1, w2) + 20;
+      const boxH = 46;
+
+      const bx = screen.x - boxW / 2;
+      const by = screen.y - 65;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = '#38BDF8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, boxW, boxH, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#FFF';
+      ctx.textAlign = 'center';
+      ctx.fillText(title, screen.x, by + 18);
+
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillText(subtitle, screen.x, by + 34);
+
+      ctx.restore();
+    }
+
+    // --- Interactive Mouse Handlers ---
+    container.addEventListener('mousedown', e => {
+      if (e.button === 0 || e.button === 1) {
+        transform.isDragging = true;
+        transform.startX = e.clientX - transform.offsetX;
+        transform.startY = e.clientY - transform.offsetY;
+      }
+    });
+
+    window.addEventListener('mousemove', e => {
+      if (transform.isDragging) {
+        transform.offsetX = e.clientX - transform.startX;
+        transform.offsetY = e.clientY - transform.startY;
+        draw();
+      } else {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        let closest = null;
+        let minDist = 18;
+
+        stations.forEach(s => {
+          const world = latLonToWorld(s.latitude, s.longitude);
+          const screen = worldToScreen(world.x, world.y);
+          const dist = Math.hypot(screen.x - mx, screen.y - my);
+          if (dist < minDist) {
+            minDist = dist;
+            closest = s;
+          }
+        });
+
+        if (closest !== hoveredStation) {
+          hoveredStation = closest;
+          canvas.style.cursor = closest ? 'pointer' : (transform.isDragging ? 'grabbing' : 'grab');
+          draw();
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      transform.isDragging = false;
+    });
+
+    container.addEventListener('click', e => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      let clicked = null;
+      let minDist = 22;
+
+      stations.forEach(s => {
+        const world = latLonToWorld(s.latitude, s.longitude);
+        const screen = worldToScreen(world.x, world.y);
+        const dist = Math.hypot(screen.x - mx, screen.y - my);
+        if (dist < minDist) {
+          minDist = dist;
+          clicked = s;
+        }
+      });
+
+      if (clicked) {
+        selectStation(clicked);
+      }
+    });
+
+    // Gentle, less sensitive smooth scroll zoom
+    container.addEventListener('wheel', e => {
+      e.preventDefault();
+      // Clamp delta to prevent sudden huge jumps
+      const delta = Math.max(-80, Math.min(80, e.deltaY));
+      const zoomFactor = Math.exp(-delta * 0.0012);
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      const world = screenToWorld(mx, my);
+
+      transform.scale = Math.max(0.35, Math.min(6.5, transform.scale * zoomFactor));
+      transform.offsetX = mx - world.x * transform.scale;
+      transform.offsetY = my - world.y * transform.scale;
+
+      draw();
+    }, { passive: false });
+
+    // Floating Map Controls
+    document.getElementById('btn-zoom-in').addEventListener('click', () => {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const world = screenToWorld(cx, cy);
+      transform.scale = Math.min(6.5, transform.scale * 1.15);
+      transform.offsetX = cx - world.x * transform.scale;
+      transform.offsetY = cy - world.y * transform.scale;
+      draw();
+    });
+
+    document.getElementById('btn-zoom-out').addEventListener('click', () => {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const world = screenToWorld(cx, cy);
+      transform.scale = Math.max(0.35, transform.scale * 0.88);
+      transform.offsetX = cx - world.x * transform.scale;
+      transform.offsetY = cy - world.y * transform.scale;
+      draw();
+    });
+
+    document.getElementById('btn-zoom-reset').addEventListener('click', resetViewToCenter);
+
+    function resetViewToCenter() {
+      // Center view around Central Jakarta (-6.21, 106.84)
+      const centerWorld = latLonToWorld(-6.21, 106.84);
+      transform.scale = 0.9;
+      transform.offsetX = canvas.width / 2 - centerWorld.x * transform.scale;
+      transform.offsetY = canvas.height / 2 - centerWorld.y * transform.scale;
+      draw();
+    }
+
+    // --- Station Inspector Engine ---
+    async function selectStation(station) {
+      selectedStation = station;
+      draw();
+
+      const inspectorBody = document.getElementById('inspector-body');
+      document.getElementById('inspector-station-id').innerText = station.id;
+
+      // Extract destination choices for this station
+      const destinations = Array.isArray(station.validDestinations) && station.validDestinations.length > 0
+        ? station.validDestinations
+        : stations.filter(s => s.id !== station.id).map(s => ({
+            lineName: station.lineNames[0] || 'KRL',
+            destinationName: s.name,
+            destinationStationId: s.id,
+          }));
+
+      inspectorBody.innerHTML = `
+        <div class="station-profile-card">
+          <div class="station-name-title">${station.name}</div>
+          <div class="station-tags">
+            ${station.isTransitHub ? '<span class="tag tag-transit">Transit Hub</span>' : ''}
+            ${station.lineNames.map(l => `<span class="tag tag-line" style="border-color: ${getLineColor(l)}; color: ${getLineColor(l)};">${l}</span>`).join('')}
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between;">
+            <span>Lat: ${station.latitude.toFixed(4)}</span>
+            <span>Lng: ${station.longitude.toFixed(4)}</span>
+          </div>
+        </div>
+
+        <div class="section-label">Live Status & Bar Graphs</div>
+        <div id="inspector-live-status" class="live-status-block">
+          <div style="font-size: 11px; color: var(--text-dim);">Loading live metrics...</div>
+        </div>
+
+        <div class="section-label" style="margin-top: 6px;">
+          <span>Submit Report (1-by-1)</span>
+          <span style="font-size: 10px; color: var(--accent-blue); text-transform: none;">Active: ${activeUser.name}</span>
+        </div>
+
+        <!-- Report Tabs -->
+        <div class="sim-card">
+          <div class="form-tabs">
+            <button class="tab-btn ${selectedReportTab === 'CROWD' ? 'active' : ''}" id="tab-rep-crowd">Crowd</button>
+            <button class="tab-btn ${selectedReportTab === 'DELAY' ? 'active' : ''}" id="tab-rep-delay">Delay</button>
+            <button class="tab-btn ${selectedReportTab === 'FACILITY' ? 'active' : ''}" id="tab-rep-facility">Facility</button>
+            <button class="tab-btn ${selectedReportTab === 'DISRUPTION' ? 'active' : ''}" id="tab-rep-disruption">Disruption</button>
+          </div>
+
+          <!-- Crowd Form -->
+          <div id="pane-rep-crowd" style="${selectedReportTab === 'CROWD' ? '' : 'display: none;'}">
+            <div style="margin-bottom: 8px;">
+              <label>Density Level</label>
+              <select id="form-crowd-sub">
+                <option value="VERY_HIGH">VERY_HIGH - Overcrowded</option>
+                <option value="HIGH">HIGH - Crowded</option>
+                <option value="NORMAL" selected>NORMAL - Moderate</option>
+                <option value="LOW">LOW - Empty</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label>Passenger Note (Optional)</label>
+              <input type="text" id="form-crowd-note" />
+            </div>
+            <button class="btn-primary sim-btn-action" id="btn-submit-crowd">Submit 1 Crowd Report</button>
+          </div>
+
+          <!-- Delay Form -->
+          <div id="pane-rep-delay" style="${selectedReportTab === 'DELAY' ? '' : 'display: none;'}">
+            <div style="margin-bottom: 8px;">
+              <label>Transit Line</label>
+              <select id="form-delay-line">
+                ${station.lineNames.map(l => `<option value="${l}">${l}</option>`).join('')}
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Heading / Terminus Destination</label>
+              <select id="form-delay-dest">
+                ${destinations.map(d => `<option value="${d.destinationStationId}">${d.destinationName} (${d.lineName || ''})</option>`).join('')}
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Delay Severity</label>
+              <select id="form-delay-sub">
+                <option value="MINOR">MINOR - Under 5 minutes</option>
+                <option value="MEDIUM" selected>MEDIUM - 5 to 15 minutes</option>
+                <option value="MAJOR">MAJOR - Over 15 minutes</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label>Passenger Note (Optional)</label>
+              <input type="text" id="form-delay-note" />
+            </div>
+            <button class="btn-primary sim-btn-action" id="btn-submit-delay">Submit 1 Delay Report</button>
+          </div>
+
+          <!-- Facility Form -->
+          <div id="pane-rep-facility" style="${selectedReportTab === 'FACILITY' ? '' : 'display: none;'}">
+            <div style="margin-bottom: 8px;">
+              <label>Facility Type</label>
+              <select id="form-facility-sub">
+                <option value="ESCALATOR">ESCALATOR - Escalator</option>
+                <option value="LIFT">LIFT - Elevator / Lift</option>
+                <option value="TAP_IN_OUT_GATE">TAP_IN_OUT_GATE - Gate Tap</option>
+                <option value="TOILET">TOILET - Restroom</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label>Passenger Note (Optional)</label>
+              <input type="text" id="form-facility-note" />
+            </div>
+            <button class="btn-primary sim-btn-action" id="btn-submit-facility">Submit 1 Broken Facility Report</button>
+          </div>
+
+          <!-- Disruption Form -->
+          <div id="pane-rep-disruption" style="${selectedReportTab === 'DISRUPTION' ? '' : 'display: none;'}">
+            <div style="margin-bottom: 8px;">
+              <label>Emergency Incident Type</label>
+              <select id="form-disruption-sub">
+                <option value="FLOOD_WEATHER">FLOOD_WEATHER - Flood / Severe Weather</option>
+                <option value="POWER_SIGNAL">POWER_SIGNAL - Power / Signal Failure</option>
+                <option value="TRACK_INCIDENT">TRACK_INCIDENT - Track Incident / Obstruction</option>
+                <option value="FIRE_SMOKE">FIRE_SMOKE - Fire / Smoke</option>
+                <option value="STATION_CLOSED">STATION_CLOSED - Station Temporarily Closed</option>
+                <option value="MEDICAL_SECURITY">MEDICAL_SECURITY - Medical / Security Alert</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;" class="checkbox-row">
+              <input type="checkbox" id="form-disruption-closed" />
+              <label for="form-disruption-closed" style="margin: 0; cursor: pointer;">Station Bypassed or Closed</label>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label>Passenger Note (Optional)</label>
+              <input type="text" id="form-disruption-note" />
+            </div>
+            <button class="btn-danger sim-btn-action" id="btn-submit-disruption">Submit 1 Disruption Report</button>
+          </div>
+        </div>
+      `;
+
+      // Tab switching handlers
+      const tabs = [
+        { id: 'tab-rep-crowd', pane: 'pane-rep-crowd', key: 'CROWD' },
+        { id: 'tab-rep-delay', pane: 'pane-rep-delay', key: 'DELAY' },
+        { id: 'tab-rep-facility', pane: 'pane-rep-facility', key: 'FACILITY' },
+        { id: 'tab-rep-disruption', pane: 'pane-rep-disruption', key: 'DISRUPTION' },
+      ];
+
+      tabs.forEach(t => {
+        const btn = document.getElementById(t.id);
+        if (btn) {
+          btn.addEventListener('click', () => {
+            selectedReportTab = t.key;
+            tabs.forEach(other => {
+              const b = document.getElementById(other.id);
+              const p = document.getElementById(other.pane);
+              if (b) b.classList.toggle('active', other.key === t.key);
+              if (p) p.style.display = other.key === t.key ? '' : 'none';
+            });
+          });
+        }
+      });
+
+      // Submit handlers
+      document.getElementById('btn-submit-crowd').addEventListener('click', () => submitCrowdReport(station));
+      document.getElementById('btn-submit-delay').addEventListener('click', () => submitDelayReport(station));
+      document.getElementById('btn-submit-facility').addEventListener('click', () => submitFacilityReport(station));
+      document.getElementById('btn-submit-disruption').addEventListener('click', () => submitDisruptionReport(station));
+
+      await fetchStationLiveStatus(station.id);
+    }
+
+    async function fetchStationLiveStatus(stationId) {
+      const container = document.getElementById('inspector-live-status');
+      if (!container) return;
+
+      try {
+        const res = await fetch(`/stations/${stationId}`);
+        if (!res.ok) throw new Error('Failed to load station status');
+        const data = await res.json();
+
+        const crowd = data.crowd || {};
+        const delays = data.delays || {};
+        const facilities = data.facilities || {};
+        const disruptions = data.disruptions || {};
+
+        // 1. Crowd Bar Graph calculation
+        const totalVotes = Number(crowd.totalVotes) || 0;
+        const b = crowd.breakdown || { low: 0, medium: 0, high: 0, very_high: 0 };
+        const low = Number(b.low) || 0;
+        const med = Number(b.medium) || 0;
+        const high = Number(b.high) || 0;
+        const vhigh = Number(b.very_high) || 0;
+
+        const lowPct = totalVotes ? ((low / totalVotes) * 100).toFixed(0) : 0;
+        const medPct = totalVotes ? ((med / totalVotes) * 100).toFixed(0) : 0;
+        const highPct = totalVotes ? ((high / totalVotes) * 100).toFixed(0) : 0;
+        const vhighPct = totalVotes ? ((vhigh / totalVotes) * 100).toFixed(0) : 0;
+
+        // 2. Delays Bar Graphs
+        const delayKeys = Object.keys(delays);
+
+        // 3. Facilities
+        const defaultFacilities = ['ESCALATOR', 'LIFT', 'TAP_IN_OUT_GATE', 'TOILET'];
+        const facilityRows = defaultFacilities.map(fKey => {
+          const f = facilities[fKey] || { status: 'OPERATIONAL', reportCount: 0, resolvedCount: 0 };
+          const isBroken = f.status === 'BROKEN';
+          return `
+            <div class="facility-row">
+              <span style="font-weight: 600;">${fKey.replace(/_/g, ' ')}</span>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span class="status-badge ${isBroken ? 'status-broken' : 'status-operational'}">
+                  ${f.status} (${f.reportCount || 0} broken / ${f.resolvedCount || 0} normal)
+                </span>
+                <button class="btn-resolve" onclick="resolveTarget('${stationId}', 'FACILITY', '${fKey}')">Sudah Normal</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // 4. Disruptions
+        const disruptionKeys = Object.keys(disruptions);
+
+        container.innerHTML = `
+          <!-- Crowd Density Bar Graph -->
+          <div class="bar-graph-card">
+            <div class="bar-graph-header">
+              <span>Crowd Density: <b style="color: ${crowd.currentCrowdLevel === 'VERY_HIGH' ? '#EF4444' : (crowd.currentCrowdLevel === 'HIGH' ? '#F59E0B' : '#10B981')}">${crowd.currentCrowdLevel || 'NORMAL'}</b></span>
+              <span style="color: var(--text-dim);">${totalVotes} total votes</span>
+            </div>
+            <div class="bar-container">
+              <div class="bar-segment bar-low" style="width: ${totalVotes ? lowPct : 25}%" title="Low: ${low}"></div>
+              <div class="bar-segment bar-med" style="width: ${totalVotes ? medPct : 25}%" title="Normal: ${med}"></div>
+              <div class="bar-segment bar-high" style="width: ${totalVotes ? highPct : 25}%" title="High: ${high}"></div>
+              <div class="bar-segment bar-vhigh" style="width: ${totalVotes ? vhighPct : 25}%" title="Very High: ${vhigh}"></div>
+            </div>
+            <div class="bar-legend">
+              <span>Low: <b>${low}</b> (${lowPct}%)</span>
+              <span>Med: <b>${med}</b> (${medPct}%)</span>
+              <span>High: <b>${high}</b> (${highPct}%)</span>
+              <span>V.High: <b>${vhigh}</b> (${vhighPct}%)</span>
+            </div>
+          </div>
+
+          <!-- Train Delay Bar Graphs & Heading -->
+          <div class="bar-graph-card">
+            <div class="bar-graph-header">
+              <span>Train Delays (${delayKeys.length})</span>
+            </div>
+            ${delayKeys.length === 0
+              ? '<div style="font-size: 11px; color: var(--text-dim); font-style: italic;">No active delays reported.</div>'
+              : delayKeys.map(k => {
+                  const d = delays[k];
+                  const dMinor = Number(d.minorCount) || 0;
+                  const dMed = Number(d.mediumCount) || 0;
+                  const dMajor = Number(d.majorCount) || 0;
+                  const dTotal = dMinor + dMed + dMajor;
+
+                  const minorPct = dTotal ? ((dMinor / dTotal) * 100).toFixed(0) : 0;
+                  const medPct = dTotal ? ((dMed / dTotal) * 100).toFixed(0) : 0;
+                  const majorPct = dTotal ? ((dMajor / dTotal) * 100).toFixed(0) : 0;
+
+                  return `
+                    <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px;">
+                        <div>
+                          <b>Heading: ${d.destinationName || 'Terminus'}</b>
+                          <span style="font-size: 10px; color: var(--accent-blue); margin-left: 4px;">(${d.lineName || d.lineId})</span>
+                        </div>
+                        <span style="color: var(--text-dim); font-size: 10px;">${dTotal} reports</span>
+                      </div>
+
+                      <div class="bar-container">
+                        <div class="bar-segment bar-delay-minor" style="width: ${minorPct}%" title="<5m: ${dMinor}"></div>
+                        <div class="bar-segment bar-delay-medium" style="width: ${medPct}%" title="5-15m: ${dMed}"></div>
+                        <div class="bar-segment bar-delay-major" style="width: ${majorPct}%" title=">15m: ${dMajor}"></div>
+                      </div>
+
+                      <div class="bar-legend" style="margin-bottom: 6px;">
+                        <span style="color: #FBBF24;">< 5m: <b>${dMinor}</b></span>
+                        <span style="color: #F97316;">5-15m: <b>${dMed}</b></span>
+                        <span style="color: #EF4444;">> 15m: <b>${dMajor}</b></span>
+                      </div>
+
+                      ${d.topNotes && d.topNotes.length ? `<div style="font-size: 10px; color: var(--text-muted); font-style: italic; margin-bottom: 6px;">"${d.topNotes[0]}"</div>` : ''}
+
+                      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+                        <span style="font-size: 10px; color: var(--text-dim);">${d.resolvedCount || 0}/3 resolution votes</span>
+                        <button class="btn-resolve" onclick="resolveTarget('${stationId}', 'DELAY', '${k}')">Sudah Normal</button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+          </div>
+
+          <!-- Station Facility Status -->
+          <div class="bar-graph-card">
+            <div class="bar-graph-header">
+              <span>Facility Amenities</span>
+            </div>
+            ${facilityRows}
+          </div>
+
+          <!-- Disruptions Status -->
+          <div class="bar-graph-card">
+            <div class="bar-graph-header">
+              <span>Emergency Disruptions (${disruptionKeys.length})</span>
+            </div>
+            ${disruptionKeys.length === 0
+              ? '<div style="font-size: 11px; color: var(--text-dim); font-style: italic;">No active emergency disruptions.</div>'
+              : disruptionKeys.map(k => {
+                  const d = disruptions[k];
+                  const isActive = d.status === 'ACTIVE';
+                  return `
+                    <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+                      <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                        <b style="color: #F87171;">${d.subCategory}</b>
+                        <span class="status-badge ${isActive ? 'status-active' : 'status-pending'}">${d.status} (${d.reportCount || 0}/3)</span>
+                      </div>
+                      ${d.isSkippedOrClosed ? '<div style="font-size: 10px; color: #FECACA; font-weight: bold; margin-bottom: 2px;">STATION BYPASSED / CLOSED</div>' : ''}
+                      ${d.topNotes && d.topNotes.length ? `<div style="font-size: 10px; color: var(--text-muted); font-style: italic; margin-bottom: 4px;">"${d.topNotes[0]}"</div>` : ''}
+                      <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                        <button class="btn-resolve" onclick="resolveTarget('${stationId}', 'DISRUPTION', '${k}')">Sudah Normal</button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div style="font-size: 11px; color: #EF4444;">Failed to load live status: ${err.message}</div>`;
+      }
+    }
+
+    // --- Individual 1-by-1 Report Actions ---
+    async function submitCrowdReport(station) {
+      const subCategory = document.getElementById('form-crowd-sub').value;
+      const noteInput = document.getElementById('form-crowd-note');
+      const note = noteInput.value.trim() || undefined;
+
+      try {
+        const res = await fetch('/report', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`,
+          },
+          body: JSON.stringify({
+            stationId: station.id,
+            category: 'CROWD',
+            subCategory,
+            note,
+            userLatitude: station.latitude,
+            userLongitude: station.longitude,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+        showToast(`Crowd vote (${subCategory}) submitted as ${activeUser.name}.`);
+        noteInput.value = '';
+        await refreshAll();
+      } catch (err) {
+        alert('Crowd report error: ' + err.message);
+      }
+    }
+
+    async function submitDelayReport(station) {
+      const lineName = document.getElementById('form-delay-line').value;
+      const destinationStationId = document.getElementById('form-delay-dest').value;
+      const subCategory = document.getElementById('form-delay-sub').value;
+      const noteInput = document.getElementById('form-delay-note');
+      const note = noteInput.value.trim() || undefined;
+
+      try {
+        const res = await fetch('/report', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`,
+          },
+          body: JSON.stringify({
+            stationId: station.id,
+            category: 'DELAY',
+            subCategory,
+            lineName,
+            destinationStationId,
+            note,
+            userLatitude: station.latitude,
+            userLongitude: station.longitude,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+        showToast(`Delay report (${subCategory}) submitted as ${activeUser.name}.`);
+        noteInput.value = '';
+        await refreshAll();
+      } catch (err) {
+        alert('Delay report error: ' + err.message);
+      }
+    }
+
+    async function submitFacilityReport(station) {
+      const subCategory = document.getElementById('form-facility-sub').value;
+      const noteInput = document.getElementById('form-facility-note');
+      const note = noteInput.value.trim() || undefined;
+
+      try {
+        const res = await fetch('/report', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`,
+          },
+          body: JSON.stringify({
+            stationId: station.id,
+            category: 'FACILITY',
+            subCategory,
+            note,
+            userLatitude: station.latitude,
+            userLongitude: station.longitude,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+        showToast(`Facility report (${subCategory}) submitted as ${activeUser.name}.`);
+        noteInput.value = '';
+        await refreshAll();
+      } catch (err) {
+        alert('Facility report error: ' + err.message);
+      }
+    }
+
+    async function submitDisruptionReport(station) {
+      const subCategory = document.getElementById('form-disruption-sub').value;
+      const isSkippedOrClosed = document.getElementById('form-disruption-closed').checked;
+      const noteInput = document.getElementById('form-disruption-note');
+      const note = noteInput.value.trim() || undefined;
+
+      try {
+        const res = await fetch('/report', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`,
+          },
+          body: JSON.stringify({
+            stationId: station.id,
+            category: 'DISRUPTION',
+            subCategory,
+            isSkippedOrClosed,
+            note,
+            userLatitude: station.latitude,
+            userLongitude: station.longitude,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+        showToast(`Disruption report (${subCategory}) submitted as ${activeUser.name}.`);
+        noteInput.value = '';
+        await refreshAll();
+      } catch (err) {
+        alert('Disruption report error: ' + err.message);
+      }
+    }
+
+    // --- Resolution Handler ("Sudah Normal") ---
+    window.resolveTarget = async function(stationId, category, targetKey) {
+      try {
+        const res = await fetch(`/stations/${stationId}/resolve`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`,
+          },
+          body: JSON.stringify({
+            category,
+            targetKey,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Resolution failed');
+
+        showToast(`Submitted resolution vote as ${activeUser.name}.`);
+        await refreshAll();
+      } catch (err) {
+        alert('Resolution error: ' + err.message);
+      }
+    };
+
+    // --- Reset All Test Data ---
+    document.getElementById('btn-reset-all').addEventListener('click', async () => {
+      if (!confirm('Wipe all simulated reports and reset all station live states?')) {
+        return;
+      }
+
+      showToast('Wiping test data...');
+      try {
+        const res = await fetch('/simulator/reset', { method: 'POST' });
+        const result = await res.json();
+        showToast(result.message || 'All test data wiped.');
+        await refreshAll();
+      } catch (err) {
+        alert('Reset error: ' + err.message);
+      }
+    });
+
+    document.getElementById('btn-refresh-feed').addEventListener('click', refreshAll);
+
+    // --- Global Disruption Feed Engine ---
+    let animFrameId = null;
+
+    function startAnimationLoopIfNeeded() {
+      if (globalFeed.length > 0 && !animFrameId) {
+        function loop() {
+          draw();
+          if (globalFeed.length > 0) {
+            animFrameId = requestAnimationFrame(loop);
+          } else {
+            animFrameId = null;
+          }
+        }
+        animFrameId = requestAnimationFrame(loop);
+      } else if (globalFeed.length === 0 && animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+        draw();
+      }
+    }
+
+    async function fetchGlobalFeed() {
+      try {
+        const res = await fetch('/report/feed/global');
+        if (!res.ok) throw new Error('Global feed fetch failed');
+        globalFeed = await res.json();
+        renderGlobalFeed();
+      } catch (err) {
+        console.error('Global feed error:', err);
+      }
+    }
+
+    function renderGlobalFeed() {
+      const feedContainer = document.getElementById('feed-card-list');
+      const badge = document.getElementById('feed-count-badge');
+      const statAlerts = document.getElementById('stat-alerts');
+      const statusDot = document.getElementById('system-status-dot');
+      const statusText = document.getElementById('system-status-text');
+
+      badge.innerText = `${globalFeed.length} Live`;
+      statAlerts.innerText = globalFeed.length;
+
+      if (globalFeed.length > 0) {
+        statusDot.classList.add('emergency');
+        statusText.innerText = `${globalFeed.length} ALERTS ACTIVE`;
+        statusText.style.color = '#F87171';
+      } else {
+        statusDot.classList.remove('emergency');
+        statusText.innerText = 'NETWORK NORMAL';
+        statusText.style.color = 'var(--text-main)';
+      }
+
+      if (globalFeed.length === 0) {
+        feedContainer.innerHTML = `
+          <div class="empty-state">
+            <div style="font-weight: 700; margin-bottom: 6px;">All Stations Normal</div>
+            <div>Zero active emergency disruptions or closures. Click a station to simulate an incident.</div>
+          </div>
+        `;
+        startAnimationLoopIfNeeded();
+        draw();
+        return;
+      }
+
+      feedContainer.innerHTML = globalFeed.map(f => {
+        let typeLabel = 'STASIUN';
+        let typeBadgeClass = 'badge-type-single';
+        let cardTypeClass = 'active-alert';
+
+        if (f.type === 'CORRIDOR_EVENT') {
+          typeLabel = 'KORIDOR';
+          typeBadgeClass = 'badge-type-corridor';
+          cardTypeClass = 'type-corridor';
+        } else if (f.type === 'MULTI_LINE_EVENT') {
+          typeLabel = 'MULTI-LINTAS';
+          typeBadgeClass = 'badge-type-multiline';
+          cardTypeClass = 'type-multiline';
+        } else if (f.type === 'MASSIVE_DELAY_EVENT') {
+          typeLabel = 'DELAY MASSAL';
+          typeBadgeClass = 'badge-type-delay';
+          cardTypeClass = 'type-delay';
+        }
+
+        const linesLabel = (f.affectedLines || f.affectedLineIds || []).join(', ') || 'Semua Lintas';
+
+        return `
+          <div class="alert-card ${cardTypeClass}" onclick="focusEventCard('${f.id}')">
+            <div class="alert-header">
+              <div style="display: flex; gap: 5px; align-items: center; flex-wrap: wrap;">
+                <span class="alert-badge ${typeBadgeClass}">${typeLabel}</span>
+                <span class="alert-badge badge-emergency">${f.primarySubCategory || f.subCategory}</span>
+                ${f.isSkippedOrClosed ? '<span class="badge-closed">DITUTUP / DILEWATI</span>' : ''}
+              </div>
+              <span style="font-size: 11px; color: var(--accent-blue); font-weight: 700;">${f.totalReports || f.reportCount || 0} reports</span>
+            </div>
+
+            <div class="alert-station" style="font-size: 13px; line-height: 1.4; margin-top: 2px;">
+              ${f.title || f.headline}
+            </div>
+
+            ${f.downstreamImpact ? `
+              <div class="alert-impact impact-downstream">
+                <span class="impact-icon">⚡</span>
+                <span>${f.downstreamImpact}</span>
+              </div>
+            ` : ''}
+
+            ${f.crowdImpact ? `
+              <div class="alert-impact impact-crowd">
+                <span class="impact-icon">👥</span>
+                <span>${f.crowdImpact}</span>
+              </div>
+            ` : ''}
+
+            ${f.topNotes && f.topNotes.length ? `<div class="alert-notes">"${f.topNotes[0]}"</div>` : ''}
+
+            <div class="alert-footer">
+              <span>${linesLabel}</span>
+              <span>${new Date(f.updatedAt).toLocaleTimeString()}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      startAnimationLoopIfNeeded();
+      draw();
+    }
+
+    window.focusEventCard = function(cardId) {
+      const card = globalFeed.find(item => item.id === cardId);
+      if (!card) return;
+
+      const targetStationIds = card.affectedStationIds && card.affectedStationIds.length
+        ? card.affectedStationIds
+        : (card.stationId ? [card.stationId] : []);
+
+      const matchedStations = stations.filter(s => targetStationIds.includes(s.id));
+      if (matchedStations.length === 0) return;
+
+      if (matchedStations.length === 1) {
+        selectStation(matchedStations[0]);
+        const world = latLonToWorld(matchedStations[0].latitude, matchedStations[0].longitude);
+        transform.scale = Math.max(1.8, transform.scale);
+        transform.offsetX = canvas.width / 2 - world.x * transform.scale;
+        transform.offsetY = canvas.height / 2 - world.y * transform.scale;
+        draw();
+        return;
+      }
+
+      // Multiple stations in corridor/multi-line: Compute bounding box and fit view
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      matchedStations.forEach(s => {
+        const w = latLonToWorld(s.latitude, s.longitude);
+        minX = Math.min(minX, w.x);
+        maxX = Math.max(maxX, w.x);
+        minY = Math.min(minY, w.y);
+        maxY = Math.max(maxY, w.y);
+      });
+
+      const spanX = Math.max(100, maxX - minX);
+      const spanY = Math.max(100, maxY - minY);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      const fitScaleX = (canvas.width * 0.65) / spanX;
+      const fitScaleY = (canvas.height * 0.65) / spanY;
+      const targetScale = Math.min(2.0, Math.max(0.7, Math.min(fitScaleX, fitScaleY)));
+
+      transform.scale = targetScale;
+      transform.offsetX = canvas.width / 2 - centerX * transform.scale;
+      transform.offsetY = canvas.height / 2 - centerY * transform.scale;
+
+      // Select anchor station
+      selectStation(matchedStations[0]);
+      draw();
+    };
+
+    window.locateStation = function(stationId) {
+      const s = stations.find(item => item.id === stationId);
+      if (s) {
+        selectStation(s);
+        const world = latLonToWorld(s.latitude, s.longitude);
+        transform.scale = Math.max(1.8, transform.scale);
+        transform.offsetX = canvas.width / 2 - world.x * transform.scale;
+        transform.offsetY = canvas.height / 2 - world.y * transform.scale;
+        draw();
+      }
+    };
+
+    // --- User & Auth Switcher Handlers ---
+    function setActiveUserIndex(index) {
+      if (testTokens && testTokens[index]) {
+        activeToken = testTokens[index].token;
+        activeUser = {
+          name: testTokens[index].name,
+          username: `operator_${index + 1}`,
+          email: `test_${index + 1}@komutin.com`,
+        };
+        customUser = null;
+        updateUserUI();
+      }
+    }
+
+    function updateUserUI() {
+      document.getElementById('user-display-name').innerText = activeUser.name;
+      const isAlpha = activeUser.name.includes('Alpha');
+      const isBeta = activeUser.name.includes('Beta');
+      const isGamma = activeUser.name.includes('Gamma');
+
+      document.getElementById('btn-user-alpha').classList.toggle('active', isAlpha);
+      document.getElementById('btn-user-beta').classList.toggle('active', isBeta);
+      document.getElementById('btn-user-gamma').classList.toggle('active', isGamma);
+      document.getElementById('btn-open-auth-modal').classList.toggle('active', !isAlpha && !isBeta && !isGamma);
+
+      if (selectedStation) {
+        selectStation(selectedStation);
+      }
+    }
+
+    document.getElementById('btn-user-alpha').addEventListener('click', () => setActiveUserIndex(0));
+    document.getElementById('btn-user-beta').addEventListener('click', () => setActiveUserIndex(1));
+    document.getElementById('btn-user-gamma').addEventListener('click', () => setActiveUserIndex(2));
+
+    // Auth Modal Handlers
+    const authModal = document.getElementById('auth-modal');
+    document.getElementById('btn-open-auth-modal').addEventListener('click', () => {
+      authModal.classList.add('open');
+      if (customUser) {
+        switchAuthTab('profile');
+      } else {
+        switchAuthTab('login');
+      }
+    });
+
+    document.getElementById('btn-close-auth-modal').addEventListener('click', () => {
+      authModal.classList.remove('open');
+    });
+
+    function switchAuthTab(tab) {
+      document.getElementById('tab-auth-login').classList.toggle('active', tab === 'login');
+      document.getElementById('tab-auth-signup').classList.toggle('active', tab === 'signup');
+      document.getElementById('tab-auth-profile').classList.toggle('active', tab === 'profile');
+
+      document.getElementById('form-login-pane').style.display = tab === 'login' ? '' : 'none';
+      document.getElementById('form-signup-pane').style.display = tab === 'signup' ? '' : 'none';
+      document.getElementById('form-profile-pane').style.display = tab === 'profile' ? '' : 'none';
+
+      if (tab === 'profile' && customUser) {
+        document.getElementById('profile-name').innerText = customUser.name;
+        document.getElementById('profile-username').innerText = customUser.username;
+        document.getElementById('profile-email').innerText = customUser.email;
+        document.getElementById('profile-role').innerText = customUser.role || 'COMMUTER';
+        document.getElementById('profile-points').innerText = customUser.points || 0;
+      }
+    }
+
+    document.getElementById('tab-auth-login').addEventListener('click', () => switchAuthTab('login'));
+    document.getElementById('tab-auth-signup').addEventListener('click', () => switchAuthTab('signup'));
+    document.getElementById('tab-auth-profile').addEventListener('click', () => switchAuthTab('profile'));
+
+    // Submit Log In
+    document.getElementById('btn-submit-login').addEventListener('click', async () => {
+      const identifier = document.getElementById('login-identifier').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errBox = document.getElementById('login-error');
+      errBox.style.display = 'none';
+
+      if (!identifier || !password) {
+        errBox.innerText = 'Please enter identifier and password.';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Log in failed');
+
+        customUser = data.user;
+        activeToken = data.tokens.accessToken;
+        activeUser = {
+          name: data.user.name,
+          username: data.user.username,
+          email: data.user.email,
+        };
+
+        showToast(`Logged in as ${customUser.name}`);
+        authModal.classList.remove('open');
+        updateUserUI();
+      } catch (err) {
+        errBox.innerText = err.message;
+        errBox.style.display = 'block';
+      }
+    });
+
+    // Submit Sign Up
+    document.getElementById('btn-submit-signup').addEventListener('click', async () => {
+      const name = document.getElementById('signup-name').value.trim();
+      const username = document.getElementById('signup-username').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const errBox = document.getElementById('signup-error');
+      errBox.style.display = 'none';
+
+      if (!name || !username || !email || !password) {
+        errBox.innerText = 'All fields are required.';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, username, email, password }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Sign up failed');
+
+        customUser = data.user;
+        activeToken = data.tokens.accessToken;
+        activeUser = {
+          name: data.user.name,
+          username: data.user.username,
+          email: data.user.email,
+        };
+
+        showToast(`Account created! Logged in as ${customUser.name}`);
+        authModal.classList.remove('open');
+        updateUserUI();
+      } catch (err) {
+        errBox.innerText = err.message;
+        errBox.style.display = 'block';
+      }
+    });
+
+    // Log Out
+    document.getElementById('btn-auth-logout').addEventListener('click', () => {
+      customUser = null;
+      setActiveUserIndex(0);
+      authModal.classList.remove('open');
+      showToast('Logged out. Switched to Operator Alpha.');
+    });
+
+    // --- Init & Bootstrap ---
+    async function init() {
+      resizeCanvas();
+
+      try {
+        // 1. Fetch simulation test tokens
+        const tokensRes = await fetch('/simulator/tokens');
+        if (tokensRes.ok) {
+          const tData = await tokensRes.json();
+          testTokens = tData.tokens || [];
+          if (testTokens.length > 0) {
+            setActiveUserIndex(0);
+          }
+        }
+
+        // 2. Fetch tracks
+        const tracksRes = await fetch('/simulator/tracks');
+        if (tracksRes.ok) {
+          tracks = await tracksRes.json();
+        }
+
+        // 3. Fetch all stations
+        const stationsRes = await fetch('/stations');
+        if (stationsRes.ok) {
+          stations = await stationsRes.json();
+          document.getElementById('stat-stations').innerText = stations.length;
+        }
+
+        // 4. Fetch global feed
+        await fetchGlobalFeed();
+
+        // Center map to Jakarta
+        resetViewToCenter();
+
+        // 5. Polling global feed every 3.5 seconds
+        setInterval(fetchGlobalFeed, 3500);
+
+        showToast('Sandbox Ready: ' + stations.length + ' Stations Loaded.');
+      } catch (err) {
+        console.error('Init error:', err);
+        showToast('Warning: ' + err.message);
+      }
+    }
+
+    async function refreshAll() {
+      await fetchGlobalFeed();
+      if (selectedStation) {
+        await fetchStationLiveStatus(selectedStation.id);
+      }
+      draw();
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -79,15 +79,15 @@ export const SouthernLine: StationSeedData[] = [
     isTransitHub: false,
     supportedTypes: [TransportType.LRTJKT],
     lineNames: ['Southern Line'],
-    latitude: 6.2018,
-    longitude: 106.8499,
+    latitude: -6.2005,
+    longitude: 106.8520,
   },
   {
     name: 'Stasiun LRT Manggarai',
     isTransitHub: false,
     supportedTypes: [TransportType.LRTJKT, TransportType.TRANSIT],
     lineNames: ['Southern Line'],
-    latitude: 6.2018,
+    latitude: -6.2090,
     longitude: 106.8499,
   },
 ];
