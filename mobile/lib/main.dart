@@ -18,11 +18,7 @@ void main() async {
     debugPrint('Supabase initialization warning (fallback): $e');
   }
 
-  runApp(
-    const ProviderScope(
-      child: KomuterApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: KomuterApp()));
 }
 
 class KomuterApp extends StatelessWidget {
