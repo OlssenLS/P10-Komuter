@@ -75,6 +75,20 @@ export const GENERIC_SYMPTOMS = new Set([
   'STATION_CLOSED',
 ]);
 
+export const RAIL_INFRASTRUCTURE_CAUSES = new Set([
+  'TRACK_INCIDENT',
+  'POWER_SIGNAL_FAILURE',
+  'POWER_SIGNAL',
+  'ROUTE_DIVERSION',
+]);
+
+export const CROSS_MODAL_ENVIRONMENTAL_CAUSES = new Set([
+  'FLOOD_WEATHER',
+  'FIRE_SMOKE',
+  'PROTEST_DEMONSTRATION',
+  'MEDICAL_SECURITY',
+]);
+
 export const CAUSE_LABELS: Record<string, string> = {
   FIRE_SMOKE: 'Kebakaran / Asap',
   FLOOD_WEATHER: 'Banjir / Cuaca Ekstrem',
@@ -214,29 +228,53 @@ export class EventMergingService {
     }
 
     // 1b. Build E_transfer (Micro-interchanges <= 400m physical walking transfers on different lines)
+    const stationLineTracksMap = new Map<string, Set<string>>();
+    for (const track of TRANSIT_TRACKS) {
+      for (const name of track.stationNames) {
+        const key = name.trim().toLowerCase();
+        if (!stationLineTracksMap.has(key)) {
+          stationLineTracksMap.set(key, new Set());
+        }
+        stationLineTracksMap.get(key)!.add(track.line);
+      }
+    }
+
     for (let i = 0; i < stations.length; i++) {
       for (let j = i + 1; j < stations.length; j++) {
         const u = stations[i];
         const v = stations[j];
 
-        // Check if already directly connected by a line edge
-        const uEdges = adjacency.get(u.id) || [];
-        const isLineConnected = uEdges.some(
-          (e) => e.targetId === v.id && e.edgeType === 'LINE',
+        // Stations must not share any line track (transfers are strictly cross-line interchanges)
+        const uLines =
+          stationLineTracksMap.get(u.name.trim().toLowerCase()) ||
+          new Set(u.lineNames || []);
+        const vLines =
+          stationLineTracksMap.get(v.name.trim().toLowerCase()) ||
+          new Set(v.lineNames || []);
+
+        let sharesAnyLine = false;
+        for (const line of uLines) {
+          if (vLines.has(line)) {
+            sharesAnyLine = true;
+            break;
+          }
+        }
+
+        if (sharesAnyLine) {
+          // Stations on the same line corridor must never be linked via E_transfer
+          continue;
+        }
+
+        const dist = calculateHaversineMeters(
+          u.latitude,
+          u.longitude,
+          v.latitude,
+          v.longitude,
         );
 
-        if (!isLineConnected) {
-          const dist = calculateHaversineMeters(
-            u.latitude,
-            u.longitude,
-            v.latitude,
-            v.longitude,
-          );
-
-          if (dist <= 400) {
-            addEdge(u.id, v.id, 'TRANSFER', undefined, dist);
-            addEdge(v.id, u.id, 'TRANSFER', undefined, dist);
-          }
+        if (dist <= 400) {
+          addEdge(u.id, v.id, 'TRANSFER', undefined, dist);
+          addEdge(v.id, u.id, 'TRANSFER', undefined, dist);
         }
       }
     }
@@ -343,9 +381,38 @@ export class EventMergingService {
         const edges = adjacency.get(currId) || [];
         for (const edge of edges) {
           const nbrId = edge.targetId;
+          // Must only traverse to ACTIVE disruption nodes.
+          // Never bridges across unreported or healthy intermediate stations (status !== 'ACTIVE').
           if (visited.has(nbrId) || !activeNodes.has(nbrId)) continue;
 
           const nbrNode = activeNodes.get(nbrId)!;
+
+          // Rail-specific infrastructure causes (TRACK_INCIDENT, POWER_SIGNAL_FAILURE, ROUTE_DIVERSION)
+          // must ONLY traverse E_line edges (same rail network/corridor) and must never bridge across
+          // E_transfer walkways onto a separate transit system.
+          if (edge.edgeType === 'TRANSFER') {
+            const isCurrRailInfra = RAIL_INFRASTRUCTURE_CAUSES.has(currNode.subCategory);
+            const isNbrRailInfra = RAIL_INFRASTRUCTURE_CAUSES.has(nbrNode.subCategory);
+            const isClusterRailInfra = Boolean(
+              clusterRootCause && RAIL_INFRASTRUCTURE_CAUSES.has(clusterRootCause),
+            );
+
+            // If either node or cluster root cause is rail-specific infrastructure, do NOT traverse E_transfer!
+            if (isCurrRailInfra || isNbrRailInfra || isClusterRailInfra) {
+              continue;
+            }
+
+            // Cross-modal / environmental causes (FLOOD_WEATHER, FIRE_SMOKE, PROTEST_DEMONSTRATION, MEDICAL_SECURITY)
+            // may continue traversing E_transfer edges
+            const hasCrossModalCause =
+              CROSS_MODAL_ENVIRONMENTAL_CAUSES.has(currNode.subCategory) ||
+              CROSS_MODAL_ENVIRONMENTAL_CAUSES.has(nbrNode.subCategory) ||
+              Boolean(clusterRootCause && CROSS_MODAL_ENVIRONMENTAL_CAUSES.has(clusterRootCause));
+
+            if (!hasCrossModalCause) {
+              continue;
+            }
+          }
 
           // Merge compatibility:
           // 1. Same subCategory merges

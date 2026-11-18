@@ -3,6 +3,8 @@ import {
   EventMergingService,
   calculateHaversineMeters,
   CAUSAL_PRIORITY,
+  RAIL_INFRASTRUCTURE_CAUSES,
+  CROSS_MODAL_ENVIRONMENTAL_CAUSES,
 } from './event-merging.service.js';
 import { Station, StationLiveStatus, TransportType } from '@prisma/client';
 
@@ -21,7 +23,7 @@ describe('EventMergingService', () => {
       expect(dist).toBeLessThan(350);
     });
 
-    it('should create transfer edges only for pairs <= 400m', () => {
+    it('should create transfer edges only for pairs <= 400m on different lines', () => {
       const mockStations: Station[] = [
         {
           id: 'st-sudirman',
@@ -64,7 +66,7 @@ describe('EventMergingService', () => {
       const { adjacency } = service.buildTopologyGraph(mockStations);
       const sudirmanEdges = adjacency.get('st-sudirman') || [];
 
-      // Sudirman to Dukuh Atas is ~200m -> TRANSFER edge should exist
+      // Sudirman to Dukuh Atas is ~200m on different lines -> TRANSFER edge should exist
       const toDukuhAtas = sudirmanEdges.find((e) => e.targetId === 'st-dukuh-atas');
       expect(toDukuhAtas).toBeDefined();
       expect(toDukuhAtas?.edgeType).toBe('TRANSFER');
@@ -73,6 +75,42 @@ describe('EventMergingService', () => {
       const toBogor = sudirmanEdges.find((e) => e.targetId === 'st-bogor');
       expect(toBogor).toBeUndefined();
     });
+
+    it('should NEVER create E_transfer edges between stations on the same line corridor', () => {
+      const mockStations: Station[] = [
+        {
+          id: 'st-cakung',
+          name: 'Stasiun Cakung',
+          isTransitHub: false,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2185,
+          longitude: 106.9531,
+          validDestinations: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'st-buaran',
+          name: 'Stasiun Buaran',
+          isTransitHub: false,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2186,
+          longitude: 106.9535,
+          validDestinations: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      const { adjacency } = service.buildTopologyGraph(mockStations);
+      const cakungEdges = adjacency.get('st-cakung') || [];
+      const transferToBuaran = cakungEdges.find(
+        (e) => e.targetId === 'st-buaran' && e.edgeType === 'TRANSFER',
+      );
+      expect(transferToBuaran).toBeUndefined();
+    });
   });
 
   describe('Causal Specificity Priority & Headline Determination', () => {
@@ -80,6 +118,18 @@ describe('EventMergingService', () => {
       expect(CAUSAL_PRIORITY['FIRE_SMOKE']).toBeGreaterThan(CAUSAL_PRIORITY['FLOOD_WEATHER']);
       expect(CAUSAL_PRIORITY['FLOOD_WEATHER']).toBeGreaterThan(CAUSAL_PRIORITY['TRACK_INCIDENT']);
       expect(CAUSAL_PRIORITY['TRACK_INCIDENT']).toBeGreaterThan(CAUSAL_PRIORITY['STATION_CLOSED']);
+    });
+
+    it('should categorize rail infrastructure vs cross-modal causes correctly', () => {
+      expect(RAIL_INFRASTRUCTURE_CAUSES.has('TRACK_INCIDENT')).toBe(true);
+      expect(RAIL_INFRASTRUCTURE_CAUSES.has('POWER_SIGNAL_FAILURE')).toBe(true);
+      expect(RAIL_INFRASTRUCTURE_CAUSES.has('POWER_SIGNAL')).toBe(true);
+      expect(RAIL_INFRASTRUCTURE_CAUSES.has('ROUTE_DIVERSION')).toBe(true);
+
+      expect(CROSS_MODAL_ENVIRONMENTAL_CAUSES.has('FLOOD_WEATHER')).toBe(true);
+      expect(CROSS_MODAL_ENVIRONMENTAL_CAUSES.has('FIRE_SMOKE')).toBe(true);
+      expect(CROSS_MODAL_ENVIRONMENTAL_CAUSES.has('PROTEST_DEMONSTRATION')).toBe(true);
+      expect(CROSS_MODAL_ENVIRONMENTAL_CAUSES.has('MEDICAL_SECURITY')).toBe(true);
     });
 
     it('should synthesize SINGLE_STATION when only 1 station has disruption', () => {
@@ -103,7 +153,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-tebet',
           stationId: 'st-tebet',
           station: stations[0],
           crowdState: {},
@@ -117,7 +166,6 @@ describe('EventMergingService', () => {
               topNotes: ['Banjir di underpass'],
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
       ];
@@ -131,11 +179,10 @@ describe('EventMergingService', () => {
       expect(feed[0].topNotes).toEqual(['Banjir di underpass']);
     });
 
-    it('should synthesize CORRIDOR_EVENT and absorb STATION_CLOSED under TRACK_INCIDENT root cause', () => {
+    it('should synthesize CORRIDOR_EVENT and absorb STATION_CLOSED under TRACK_INCIDENT along E_line', () => {
       const now = new Date();
       const expires = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
 
-      // Consecutive stations on Cikarang Line: Cakung, Klender Baru, Buaran
       const stations: Station[] = [
         {
           id: 'st-cakung',
@@ -177,7 +224,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-cakung',
           stationId: 'st-cakung',
           station: stations[0],
           crowdState: {},
@@ -192,11 +238,9 @@ describe('EventMergingService', () => {
               topNotes: ['Stasiun ditutup'],
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-klender-baru',
           stationId: 'st-klender-baru',
           station: stations[1],
           crowdState: {},
@@ -210,11 +254,9 @@ describe('EventMergingService', () => {
               topNotes: ['Rel patah'],
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-buaran',
           stationId: 'st-buaran',
           station: stations[2],
           crowdState: {},
@@ -229,7 +271,6 @@ describe('EventMergingService', () => {
               topNotes: ['Kereta tidak berhenti'],
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
       ];
@@ -245,11 +286,104 @@ describe('EventMergingService', () => {
       expect(feed[0].isSkippedOrClosed).toBe(true);
     });
 
-    it('should synthesize MULTI_LINE_EVENT when disruption connects across micro-interchanges', () => {
+    it('should NEVER bridge two active nodes across an intermediate healthy/unreported station', () => {
       const now = new Date();
       const expires = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
 
-      // Sudirman (Cikarang Line) and Dukuh Atas BNI (MRT) are <400m
+      const stations: Station[] = [
+        {
+          id: 'st-cakung',
+          name: 'Stasiun Cakung',
+          isTransitHub: false,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2185,
+          longitude: 106.9531,
+          validDestinations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'st-klender-baru',
+          name: 'Stasiun Klender Baru',
+          isTransitHub: false,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2182,
+          longitude: 106.9388,
+          validDestinations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'st-buaran',
+          name: 'Stasiun Buaran',
+          isTransitHub: false,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2166,
+          longitude: 106.9189,
+          validDestinations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+
+      const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
+        {
+          stationId: 'st-cakung',
+          station: stations[0],
+          crowdState: {},
+          delayState: {},
+          facilityState: {},
+          disruptionState: {
+            TRACK_INCIDENT: {
+              status: 'ACTIVE',
+              reportCount: 5,
+              expiresAt: expires,
+            },
+          },
+          updatedAt: now,
+        },
+        // Klender Baru has NO active disruption (normal station)
+        {
+          stationId: 'st-klender-baru',
+          station: stations[1],
+          crowdState: {},
+          delayState: {},
+          facilityState: {},
+          disruptionState: {},
+          updatedAt: now,
+        },
+        {
+          stationId: 'st-buaran',
+          station: stations[2],
+          crowdState: {},
+          delayState: {},
+          facilityState: {},
+          disruptionState: {
+            TRACK_INCIDENT: {
+              status: 'ACTIVE',
+              reportCount: 4,
+              expiresAt: expires,
+            },
+          },
+          updatedAt: now,
+        },
+      ];
+
+      const feed = service.synthesizeFeed(stations, liveStatuses, now);
+      expect(feed.length).toBe(2);
+      expect(feed[0].type).toBe('SINGLE_STATION');
+      expect(feed[1].type).toBe('SINGLE_STATION');
+      expect(feed.map((f) => f.stationId)).toContain('st-cakung');
+      expect(feed.map((f) => f.stationId)).toContain('st-buaran');
+    });
+
+    it('should NOT bridge TRACK_INCIDENT or POWER_SIGNAL_FAILURE across E_transfer walkways', () => {
+      const now = new Date();
+      const expires = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+
       const stations: Station[] = [
         {
           id: 'st-sudirman',
@@ -279,7 +413,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-sudirman',
           stationId: 'st-sudirman',
           station: stations[0],
           crowdState: {},
@@ -288,16 +421,86 @@ describe('EventMergingService', () => {
           disruptionState: {
             POWER_SIGNAL: {
               status: 'ACTIVE',
-              reportCount: 6,
+              reportCount: 7,
               expiresAt: expires,
-              topNotes: ['Mati listrik'],
             },
           },
+          updatedAt: now,
+        },
+        {
+          stationId: 'st-dukuh-atas',
+          station: stations[1],
+          crowdState: {},
+          delayState: {},
+          facilityState: {},
+          disruptionState: {
+            STATION_CLOSED: {
+              status: 'ACTIVE',
+              reportCount: 3,
+              expiresAt: expires,
+              isSkippedOrClosed: true,
+            },
+          },
+          updatedAt: now,
+        },
+      ];
+
+      const feed = service.synthesizeFeed(stations, liveStatuses, now);
+      expect(feed.length).toBe(2);
+      expect(feed.every((f) => f.type === 'SINGLE_STATION')).toBe(true);
+      expect(feed.some((f) => f.stationId === 'st-sudirman')).toBe(true);
+      expect(feed.some((f) => f.stationId === 'st-dukuh-atas')).toBe(true);
+    });
+
+    it('should ALLOW cross-modal environmental causes (FLOOD_WEATHER / FIRE_SMOKE / PROTEST) to bridge across E_transfer into MULTI_LINE_EVENT', () => {
+      const now = new Date();
+      const expires = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+
+      const stations: Station[] = [
+        {
+          id: 'st-sudirman',
+          name: 'Stasiun Sudirman',
+          isTransitHub: true,
+          supportedTypes: [TransportType.KRL],
+          lineNames: ['Cikarang Line'],
+          latitude: -6.2024,
+          longitude: 106.8236,
+          validDestinations: [],
           createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-dukuh-atas',
+          id: 'st-dukuh-atas',
+          name: 'Stasiun MRT Dukuh Atas BNI',
+          isTransitHub: true,
+          supportedTypes: [TransportType.MRT],
+          lineNames: ['North South Line (MRT)'],
+          latitude: -6.2008,
+          longitude: 106.8228,
+          validDestinations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+
+      const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
+        {
+          stationId: 'st-sudirman',
+          station: stations[0],
+          crowdState: {},
+          delayState: {},
+          facilityState: {},
+          disruptionState: {
+            FLOOD_WEATHER: {
+              status: 'ACTIVE',
+              reportCount: 6,
+              expiresAt: expires,
+              topNotes: ['Banjir di underpass Dukuh Atas'],
+            },
+          },
+          updatedAt: now,
+        },
+        {
           stationId: 'st-dukuh-atas',
           station: stations[1],
           crowdState: {},
@@ -309,10 +512,9 @@ describe('EventMergingService', () => {
               reportCount: 4,
               expiresAt: expires,
               isSkippedOrClosed: true,
-              topNotes: ['Pintu masuk ditutup'],
+              topNotes: ['Pintu masuk tergenang'],
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
       ];
@@ -320,7 +522,7 @@ describe('EventMergingService', () => {
       const feed = service.synthesizeFeed(stations, liveStatuses, now);
       expect(feed.length).toBe(1);
       expect(feed[0].type).toBe('MULTI_LINE_EVENT');
-      expect(feed[0].primarySubCategory).toBe('POWER_SIGNAL');
+      expect(feed[0].primarySubCategory).toBe('FLOOD_WEATHER');
       expect(feed[0].title).toContain('Lintas Terdampak');
       expect(feed[0].affectedLines.length).toBeGreaterThanOrEqual(2);
       expect(feed[0].totalReports).toBe(10);
@@ -373,7 +575,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-juanda',
           stationId: 'st-juanda',
           station: stations[0],
           crowdState: {},
@@ -386,11 +587,9 @@ describe('EventMergingService', () => {
               expiresAt: expires,
             },
           },
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-gondangdia',
           stationId: 'st-gondangdia',
           station: stations[1],
           crowdState: { high: 2 },
@@ -402,11 +601,9 @@ describe('EventMergingService', () => {
           },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-cikini',
           stationId: 'st-cikini',
           station: stations[2],
           crowdState: {},
@@ -418,7 +615,6 @@ describe('EventMergingService', () => {
           },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
       ];
@@ -479,7 +675,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-duri',
           stationId: 'st-duri',
           station: stations[0],
           crowdState: { high: 3 },
@@ -493,11 +688,9 @@ describe('EventMergingService', () => {
           },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-grogol',
           stationId: 'st-grogol',
           station: stations[1],
           crowdState: {},
@@ -510,11 +703,9 @@ describe('EventMergingService', () => {
           },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-pesing',
           stationId: 'st-pesing',
           station: stations[2],
           crowdState: {},
@@ -527,7 +718,6 @@ describe('EventMergingService', () => {
           },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
       ];
@@ -599,7 +789,6 @@ describe('EventMergingService', () => {
 
       const liveStatuses: (StationLiveStatus & { station?: Station })[] = [
         {
-          id: 'ls-ancol',
           stationId: 's-single',
           station: stations[0],
           crowdState: {},
@@ -608,40 +797,33 @@ describe('EventMergingService', () => {
           disruptionState: {
             FLOOD_WEATHER: { status: 'ACTIVE', reportCount: 1, expiresAt: expires },
           },
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-t1',
           stationId: 's-tng1',
           station: stations[1],
           crowdState: {},
           delayState: { 'Tangerang Line:x': { lineName: 'Tangerang Line', majorCount: 5, expiresAt: expires } },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-t2',
           stationId: 's-tng2',
           station: stations[2],
           crowdState: {},
           delayState: { 'Tangerang Line:x': { lineName: 'Tangerang Line', majorCount: 5, expiresAt: expires } },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
         {
-          id: 'ls-t3',
           stationId: 's-tng3',
           station: stations[3],
           crowdState: {},
           delayState: { 'Tangerang Line:x': { lineName: 'Tangerang Line', majorCount: 5, expiresAt: expires } },
           facilityState: {},
           disruptionState: {},
-          createdAt: now,
           updatedAt: now,
         },
       ];
